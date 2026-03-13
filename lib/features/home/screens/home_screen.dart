@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nexa/core/theme/app_theme.dart';
 import 'package:nexa/features/home/widgets/health_score_card.dart';
+import 'package:nexa/features/transactions/providers/transactions_provider.dart';
+import 'package:nexa/features/transactions/widgets/transaction_card.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -12,15 +14,34 @@ class HomeScreen extends ConsumerWidget {
       body: CustomScrollView(
         slivers: [
           _buildHeader(),
-          SliverToBoxAdapter(
+          const SliverToBoxAdapter(
             child: HealthScoreCard(
               score: 75,
             ), // health card
           ),
-          SliverList(
-            delegate: SliverChildListDelegate([]),
-          )
+          _buildTransactionsList(ref),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTransactionsList(WidgetRef ref) {
+    final transactionsAsync = ref.watch(transactionsProvider);
+
+    return transactionsAsync.when(
+      loading: () => const SliverToBoxAdapter(
+        child: Center(child: CircularProgressIndicator()),
+      ),
+      error: (err, stack) => SliverToBoxAdapter(
+        child: Center(child: Text('Erro: $err')),
+      ),
+      data: (transactions) => SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (context, index) => TransactionCard(
+            transaction: transactions[index],
+          ),
+          childCount: transactions.length,
+        ),
       ),
     );
   }
@@ -44,7 +65,7 @@ class HomeScreen extends ConsumerWidget {
                     fontSize: 24,
                   ),
                 ),
-                Text(
+                const Text(
                   'R\$ 5.000,00',
                   style: TextStyle(
                       color: Colors.white,

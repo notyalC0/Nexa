@@ -36,7 +36,7 @@ class HealthScoreCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
+              const Text(
                 'Saúde Financeira',
                 style: TextStyle(
                   fontSize: 16,
@@ -46,7 +46,7 @@ class HealthScoreCard extends StatelessWidget {
               ),
               Text(
                 _getScoreLabel(),
-                style: TextStyle(fontSize: 14),
+                style: const TextStyle(fontSize: 14),
               ),
             ],
           ),
@@ -56,7 +56,7 @@ class HealthScoreCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
             child: LinearProgressIndicator(
               value: score / 100, // score é 0-100, o value precisa ser 0.0-1.0
-              minHeight: 12,
+              minHeight: 20,
               backgroundColor: Colors.grey.shade200,
               valueColor: AlwaysStoppedAnimation<Color>(_getScoreColor()),
             ),
@@ -64,7 +64,7 @@ class HealthScoreCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             'Score: $score / 100',
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 12,
               color: AppTheme.textSecondary,
             ),

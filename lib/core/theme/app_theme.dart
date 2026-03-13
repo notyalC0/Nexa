@@ -28,7 +28,7 @@ class AppTheme {
         primary: primaryColor,
         secondary: accentColor,
       ),
-      cardTheme: const CardTheme(
+      cardTheme: const CardThemeData(
         color: cardColor,
         elevation: 0,
         shape: RoundedRectangleBorder(
@@ -46,7 +46,7 @@ class AppTheme {
         primary: primaryColor,
         secondary: accentColor,
       ),
-      cardTheme: const CardTheme(
+      cardTheme: const CardThemeData(
         color: cardColor,
         elevation: 0,
         shape: RoundedRectangleBorder(

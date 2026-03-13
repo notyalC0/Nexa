@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:nexa/core/models/categories.dart';
 import 'package:nexa/core/models/transactions.dart';
 import 'package:path/path.dart';
@@ -90,11 +91,18 @@ class DatabaseHelper {
 
   Future<List<Transactions>> getTransactionsByMonth(String month) async {
     final db = await database;
+    debugPrint('Buscando mês: $month');
     final maps = await db.query(
       'transactions',
       where: 'date LIKE ?',
       whereArgs: ['$month%'],
     );
+    debugPrint('Encontrou: ${maps.length} transações');
     return List.generate(maps.length, (i) => Transactions.fromMap(maps[i]));
+  }
+
+  Future<int> insertTransaction(Transactions transaction) async {
+    final db = await database;
+    return db.insert('transactions', transaction.toMap());
   }
 }
