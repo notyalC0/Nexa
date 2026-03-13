@@ -18,9 +18,9 @@ class TransactionCard extends StatelessWidget {
 
   String _getAmountPrefix() {
     if (transaction.type == 'income') {
-      return '+R\$';
+      return '+';
     } else {
-      return '-R\$';
+      return '-';
     }
   }
 
