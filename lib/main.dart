@@ -1,10 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:nexa/core/database/database_helper.dart';
+import 'package:nexa/core/models/categories.dart';
+import 'package:nexa/core/models/transactions.dart';
 import 'package:nexa/features/home/screens/home_screen.dart';
-
+import 'package:path/path.dart';
+import 'package:sqflite/sqflite.dart';
 import 'core/theme/app_theme.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+
+  final db = DatabaseHelper.instance;
+
+
+
+
+  await db.insertCategory(Categories(
+    name: 'Alimentação',
+    icon: 'restaurant',
+    colorHex: '#FF6B35',
+    type: 'expense',
+  ));
+
+  
+
   runApp(
     const ProviderScope(
       child: MyApp(),

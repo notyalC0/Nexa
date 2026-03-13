@@ -77,6 +77,7 @@ class DatabaseHelper {
   ''');
   }
 
+//#region Categories queries
   Future<List<Categories>> getCategories() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('categories');
@@ -87,7 +88,11 @@ class DatabaseHelper {
     final db = await database;
     return db.insert('categories', categories.toMap());
   }
+  //#endregion
 
+
+
+//#region Transactions queries
   Future<List<Transactions>> getTransactionsByMonth(String month) async {
     final db = await database;
     final maps = await db.query(
@@ -97,4 +102,10 @@ class DatabaseHelper {
     );
     return List.generate(maps.length, (i) => Transactions.fromMap(maps[i]));
   }
+
+  Future<int> insertTransaction(Transactions transactions) async {
+    final db = await database;
+    return db.insert('transactions', transactions.toMap());
+  }
+  //#endregion
 }

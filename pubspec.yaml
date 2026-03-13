@@ -42,6 +42,9 @@ dependencies:
   intl: ^0.18.1
   # Notificações
   notification_listener_service: ^0.3.5
+  font_awesome_flutter: ^10.4.0
+  flutter_animate: ^4.5.2
+  gap: ^3.0.1
 
 dev_dependencies:
   flutter_test:
