@@ -13,14 +13,42 @@ void main() async {
 
   final db = DatabaseHelper.instance;
   final categories = await db.getCategories();
-
-  if (!categories.any((c) => c.name == 'Alimentação' && c.type == 'expense')) {
-    await db.insertCategory(Categories(
+  final defaultCategories = [
+    Categories(
       name: 'Alimentação',
       icon: 'restaurant',
       colorHex: '#FF6B35',
       type: 'expense',
-    ));
+      isDefault: true,
+    ),
+    Categories(
+      name: 'Transporte',
+      icon: 'directions_car',
+      colorHex: '#4D96FF',
+      type: 'expense',
+      isDefault: true,
+    ),
+    Categories(
+      name: 'Lazer',
+      icon: 'sports_esports',
+      colorHex: '#A66CFF',
+      type: 'expense',
+      isDefault: true,
+    ),
+    Categories(
+      name: 'Saúde',
+      icon: 'health_and_safety',
+      colorHex: '#2ECC71',
+      type: 'expense',
+      isDefault: true,
+    ),
+  ];
+
+  for (final category in defaultCategories) {
+    if (!categories
+        .any((c) => c.name == category.name && c.type == category.type)) {
+      await db.insertCategory(category);
+    }
   }
 
   FlutterNativeSplash.remove();
@@ -53,4 +81,3 @@ class MyApp extends ConsumerWidget {
     );
   }
 }
-

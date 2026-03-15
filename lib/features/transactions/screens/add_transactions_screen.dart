@@ -32,6 +32,7 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
   String? _selectedStatus;
   String? _selectedDateForDb;
   int? _selectedCardId;
+  int? _selectedCategoryId;
   bool _triedToSave = false;
 
   final _types = [
@@ -50,6 +51,7 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
       _selectedType = widget.transaction!.type;
       _selectedStatus = widget.transaction!.status;
       _selectedCardId = widget.transaction!.creditCardsId;
+      _selectedCategoryId = widget.transaction!.categoryID;
       _descriptionController.text = widget.transaction!.description ?? '';
       final date = DateFormat('yyyy-MM-dd').parse(widget.transaction!.date);
       _dateController.text =
@@ -171,7 +173,7 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
             status: _selectedStatus ?? 'confirmed', // nullable — sem !
             description: _descriptionController.text,
             date: DateFormat('yyyy-MM-dd').format(parcelaDate),
-            categoryID: 1,
+            categoryID: _selectedCategoryId ?? 1,
             creditCardsId: _selectedCardId,
             installmentTotal: totalParcelas,
             installmentCurrent: i + 1,
@@ -199,7 +201,7 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
           description: _descriptionController.text,
           date:
               _selectedDateForDb ?? _dateController.text, // formato yyyy-MM-dd
-          categoryID: 1,
+          categoryID: _selectedCategoryId ?? 1,
           creditCardsId: _selectedCardId,
           isRecurring: _isRecurring,
           createdFromNotification: false,
@@ -233,6 +235,7 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final cardsAsync = ref.watch(creditCardProvider);
+    final categoriesAsync = ref.watch(categoriesProvider);
     return Scaffold(
       backgroundColor: colorScheme.surface,
       appBar: AppBar(
@@ -501,10 +504,44 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
               ),
             ),
             const Gap(14),
-            TextFormField(
-              keyboardType: TextInputType.number,
-              decoration:
-                  _fieldDecoration('Categoria', icon: Icons.category_rounded),
+            categoriesAsync.when(
+              loading: () => DropdownButtonFormField<int>(
+                decoration:
+                    _fieldDecoration('Categoria', icon: Icons.category_rounded),
+                onChanged: null,
+                items: const [],
+                hint: const Text('Carregando...'),
+              ),
+              error: (_, __) => DropdownButtonFormField<int>(
+                decoration:
+                    _fieldDecoration('Categoria', icon: Icons.category_rounded),
+                onChanged: null,
+                items: const [],
+                hint: const Text('Sem categorias'),
+              ),
+              data: (categories) {
+                final selectedExists = categories
+                    .any((category) => category.id == _selectedCategoryId);
+                final dropdownValue = selectedExists ? _selectedCategoryId : null;
+
+                return DropdownButtonFormField<int>(
+                  decoration:
+                      _fieldDecoration('Categoria', icon: Icons.category_rounded),
+                  value: dropdownValue,
+                  onChanged: (value) => setState(() => _selectedCategoryId = value),
+                  hint: const Text('Selecione uma categoria'),
+                  validator: (value) {
+                    if (value == null) return 'Selecione uma categoria';
+                    return null;
+                  },
+                  items: categories
+                      .map((category) => DropdownMenuItem(
+                            value: category.id,
+                            child: Text(category.name),
+                          ))
+                      .toList(),
+                );
+              },
             ),
             const Gap(24),
 

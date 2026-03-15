@@ -143,6 +143,17 @@ class _TransactionsPageState extends ConsumerState<_TransactionsPage> {
     return label;
   }
 
+  String getGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour >= 5 && hour < 12) {
+      return 'Bom dia';
+    }
+    if (hour >= 12 && hour < 18) {
+      return 'Boa tarde';
+    }
+    return 'Boa noite';
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -345,7 +356,7 @@ class _TransactionsPageState extends ConsumerState<_TransactionsPage> {
             mainAxisAlignment: MainAxisAlignment.end,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Bom dia 👋',
+              Text('${getGreeting()} 👋',
                   style: TextStyle(
                       color: colorScheme.onPrimary.withOpacity(0.65),
                       fontSize: 13,
