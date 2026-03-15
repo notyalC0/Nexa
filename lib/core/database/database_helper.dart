@@ -30,6 +30,7 @@ class DatabaseHelper {
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
+      await _removeDuplicateCategoriesFromDb(db);
       await _createIndexes(db);
     }
   }
@@ -84,6 +85,7 @@ class DatabaseHelper {
         update_at TEXT
         )
   ''');
+    await _removeDuplicateCategoriesFromDb(db);
     await _createIndexes(db);
   }
 
@@ -109,6 +111,35 @@ class DatabaseHelper {
     ''');
   }
 
+  Future<void> _removeDuplicateCategoriesFromDb(DatabaseExecutor db) async {
+    await db.execute('''
+      DELETE FROM categories
+      WHERE id NOT IN (
+        SELECT MIN(id)
+        FROM categories
+        GROUP BY name, type
+      )
+    ''');
+  }
+
+  Future<void> ensureDefaultCategories(List<Categories> defaultCategories) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await _removeDuplicateCategoriesFromDb(txn);
+      final batch = txn.batch();
+
+      for (final category in defaultCategories) {
+        batch.insert(
+          'categories',
+          category.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
+      }
+
+      await batch.commit(noResult: true);
+    });
+  }
+
 //queries
 
 //#region Category
@@ -130,17 +161,6 @@ class DatabaseHelper {
     );
   }
 
-  Future<void> removeDuplicateCategories() async {
-    final db = await database;
-    await db.execute('''
-      DELETE FROM categories
-      WHERE id NOT IN (
-        SELECT MIN(id)
-        FROM categories
-        GROUP BY name, type
-      )
-    ''');
-  }
 //#endregion
 
 //#region Transactions
