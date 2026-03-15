@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:nexa/core/models/categories.dart';
+import 'package:nexa/core/models/credit_cards.dart';
 import 'package:nexa/core/models/transactions.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
@@ -78,6 +79,9 @@ class DatabaseHelper {
   ''');
   }
 
+//queries
+
+//#region Category
   Future<List<Categories>> getCategories() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('categories');
@@ -88,7 +92,9 @@ class DatabaseHelper {
     final db = await database;
     return db.insert('categories', categories.toMap());
   }
+//#endregion
 
+//#region Transactions
   Future<List<Transactions>> getTransactionsByMonth(String month) async {
     final db = await database;
     debugPrint('Buscando mês: $month');
@@ -103,6 +109,135 @@ class DatabaseHelper {
 
   Future<int> insertTransaction(Transactions transaction) async {
     final db = await database;
-    return db.insert('transactions', transaction.toMap());
+    return db.insert(
+      'transactions',
+      transaction.toMap(),
+    );
+  }
+
+  Future<int> updateTransaction(Transactions transaction) async {
+    final db = await database;
+    return db.update(
+      'transactions',
+      transaction.toMap(),
+      where: 'id = ?',
+      whereArgs: [transaction.id],
+    );
+  }
+
+  Future<int> deleteTransaction(int id) async {
+    final db = await database;
+    return db.delete(
+      'transactions',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<int> deleteGroupTransaction(int groupId) async {
+    final db = await database;
+    return db.delete(
+      'transactions',
+      where: 'installment_group_id = ?',
+      whereArgs: [groupId],
+    );
+  }
+//#endregion
+
+//#region CreditCards
+  Future<List<CreditCards>> getCreditCards() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query('credit_cards');
+    return List.generate(maps.length, (i) => CreditCards.fromMap(maps[i]));
+  }
+
+  Future<int> insertCreditCards(CreditCards creditCards) async {
+    final db = await database;
+    return db.insert('credit_cards', creditCards.toMap());
+  }
+
+  Future<int> updateCreditCards(CreditCards creditCards) async {
+    final db = await database;
+    return db.update(
+      'credit_cards',
+      creditCards.toMap(),
+      where: 'id = ?',
+      whereArgs: [creditCards.id],
+    );
+  }
+
+  Future<int> deleteCreditCards(int id) async {
+    final db = await database;
+    return db.delete(
+      'credit_cards',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+//#endregion
+
+  Future<String?> getSetting(String key) async {
+    final db = await database;
+    final maps = await db.query(
+      'settings',
+      where: 'key = ?',
+      whereArgs: [key],
+    );
+    if (maps.isEmpty) return null;
+    return maps.first['value'] as String?;
+  }
+
+  Future<void> saveSetting(String key, String value) async {
+    final db = await database;
+    await db.insert(
+      'settings',
+      {'key': key, 'value': value},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<int> getTotalExpensesForMonth(String month) async {
+    final db = await database;
+    final result = await db.rawQuery('''
+    SELECT SUM(amount_cents) as total FROM transactions
+    WHERE type = 'expense'
+    AND status = 'confirmed'
+    AND date LIKE ?
+  ''', ['$month%']);
+    return result.first['total'] as int? ?? 0;
+  }
+
+  Future<int> getTotalPendingExpensesForMonth(String month) async {
+    final db = await database;
+    final result = await db.rawQuery('''
+    SELECT SUM(amount_cents) as total FROM transactions
+    WHERE type = 'expense'
+    AND status = 'pending'
+    AND date LIKE ?
+  ''', ['$month%']);
+    return result.first['total'] as int? ?? 0;
+  }
+
+  Future<int> getTotalIncomeForMonth(String month) async {
+    final db = await database;
+    final result = await db.rawQuery('''
+    SELECT SUM(amount_cents) as total FROM transactions
+    WHERE type = 'income'
+    AND status = 'confirmed'
+    AND date LIKE ?
+  ''', ['$month%']);
+    return result.first['total'] as int? ?? 0;
+  }
+
+  Future<int> getBalanceForMonth(String month) async {
+    final income = await getTotalIncomeForMonth(month);
+    final expense = await getTotalExpensesForMonth(month);
+    return income - expense;
+  }
+
+  Future<int> getProjectedBalanceForMonth(String month) async {
+    final available = await getBalanceForMonth(month);
+    final pending = await getTotalPendingExpensesForMonth(month);
+    return available - pending;
   }
 }

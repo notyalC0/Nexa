@@ -1,22 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nexa/core/database/database_helper.dart';
 import 'package:nexa/core/models/categories.dart';
-import 'package:nexa/core/models/transactions.dart';
 import 'package:nexa/features/home/screens/home_screen.dart';
-import 'package:path/path.dart';
-import 'package:sqflite/sqflite.dart';
-
 import 'core/theme/app_theme.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
-  // Seed temporário — remove depois
   final db = DatabaseHelper.instance;
-// Apaga o banco para começar limpo
-  final dbPath = join(await getDatabasesPath(), 'nexa.db');
-  await deleteDatabase(dbPath);
 
   await db.insertCategory(Categories(
     name: 'Alimentação',
@@ -25,16 +19,7 @@ void main() async {
     type: 'expense',
   ));
 
-  await db.insertTransaction(Transactions(
-    amountCents: 4750,
-    type: 'expense',
-    status: 'confirmed',
-    date: '2026-03-10',
-    categoryID: 1,
-    isRecurring: false,
-    createdFromNotification: false,
-    description: 'Mercado',
-  ));
+  FlutterNativeSplash.remove();
 
   runApp(
     const ProviderScope(
