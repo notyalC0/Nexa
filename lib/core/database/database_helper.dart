@@ -134,7 +134,7 @@ class DatabaseHelper {
     );
   }
 
-  Future<int> deleteGroupTransaction(int groupId) async {
+  Future<int> deleteGroupTransaction(String groupId) async {
     final db = await database;
     return db.delete(
       'transactions',
