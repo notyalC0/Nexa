@@ -497,7 +497,7 @@ class _CreditCardWidget extends ConsumerWidget {
         : ref.watch(cardLimitDetailsProvider(card.id!));
 
     return Container(
-      height: 220,
+      height: 250,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -549,10 +549,12 @@ class _CreditCardWidget extends ConsumerWidget {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        _CardIconButton(icon: Icons.edit_outlined, onTap: onEdit),
+                        _CardIconButton(
+                            icon: Icons.edit_outlined, onTap: onEdit),
                         const SizedBox(width: 8),
                         _CardIconButton(
-                            icon: Icons.delete_outline_rounded, onTap: onDelete),
+                            icon: Icons.delete_outline_rounded,
+                            onTap: onDelete),
                       ],
                     ),
                   ],
@@ -580,14 +582,16 @@ class _CreditCardWidget extends ConsumerWidget {
                     final total = details.dynamicLimitCents;
                     final used = details.usedCents;
                     final available = details.availableCents;
-                    final percent = (details.usedPercent * 100).toStringAsFixed(0);
+                    final percent =
+                        (details.usedPercent * 100).toStringAsFixed(0);
 
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Limite dinâmico: ${CurrencyFormatter.format(total)}',
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                          'Limite Total: ${CurrencyFormatter.format(total)}',
+                          style: const TextStyle(
+                              color: Colors.white, fontWeight: FontWeight.w700),
                         ),
                         const Gap(6),
                         ClipRRect(
@@ -596,27 +600,36 @@ class _CreditCardWidget extends ConsumerWidget {
                             minHeight: 7,
                             value: details.usedPercent,
                             backgroundColor: Colors.white24,
-                            valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                            valueColor: const AlwaysStoppedAnimation<Color>(
+                                Colors.white),
                           ),
                         ),
                         const Gap(8),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('Usado: ${CurrencyFormatter.format(used)}',
-                                style: TextStyle(
-                                    color: Colors.white.withOpacity(0.9), fontSize: 12)),
-                            Text('Disponível: ${CurrencyFormatter.format(available)}',
-                                style: TextStyle(
-                                    color: Colors.white.withOpacity(0.9), fontSize: 12)),
+                            Text(
+                              'Disponível: ${CurrencyFormatter.format(available)}',
+                              style: TextStyle(
+                                  color: Colors.white.withOpacity(0.9),
+                                  fontSize: 12),
+                            ),
+                            Text(
+                              '$percent% utilizado',
+                              style: TextStyle(
+                                  color: Colors.white.withOpacity(0.85),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600),
+                            ),
                           ],
                         ),
                         const Gap(4),
-                        Text('$percent% utilizado',
-                            style: TextStyle(
-                                color: Colors.white.withOpacity(0.85),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600)),
+                        Text(
+                          'Usado: ${CurrencyFormatter.format(used)}',
+                          style: TextStyle(
+                              color: Colors.white.withOpacity(0.9),
+                              fontSize: 12),
+                        ),
                       ],
                     );
                   },
@@ -625,7 +638,8 @@ class _CreditCardWidget extends ConsumerWidget {
                 Row(
                   children: [
                     _CardInfoPill(
-                        label: 'Fecha dia ${card.closingDay}', icon: Icons.event_rounded),
+                        label: 'Fecha dia ${card.closingDay}',
+                        icon: Icons.event_rounded),
                     const SizedBox(width: 8),
                     _CardInfoPill(
                         label: 'Vence dia ${card.dueDay}',
@@ -756,7 +770,7 @@ class _CardSummaryTile extends ConsumerWidget {
                   ),
                   const Gap(4),
                   Text(
-                    'Disponível: ${CurrencyFormatter.format(details.availableCents)} · Usado: ${CurrencyFormatter.format(details.usedCents)}',
+                    'Disponível: ${CurrencyFormatter.format(details.availableCents)}\nUsado: ${CurrencyFormatter.format(details.usedCents)}',
                     style: TextStyle(
                         fontSize: 12,
                         color: colorScheme.onSurface.withOpacity(0.55)),

@@ -49,3 +49,7 @@ class MyApp extends ConsumerWidget {
     );
   }
 }
+
+extension on AsyncValue<AppSettingsState> {
+  get valueOrNull => null;
+}

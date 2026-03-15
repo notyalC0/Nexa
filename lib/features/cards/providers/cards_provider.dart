@@ -12,7 +12,8 @@ class CardLimitDetails {
     required this.dynamicLimitCents,
   });
 
-  int get availableCents => (dynamicLimitCents - usedCents).clamp(0, dynamicLimitCents);
+  int get availableCents =>
+      (dynamicLimitCents - usedCents).clamp(0, dynamicLimitCents);
   double get usedPercent =>
       dynamicLimitCents == 0 ? 0 : (usedCents / dynamicLimitCents).clamp(0, 1);
 }
@@ -27,9 +28,11 @@ final cardLimitDetailsProvider =
   final month = '${now.year}-${now.month.toString().padLeft(2, '0')}';
   final db = DatabaseHelper.instance;
 
+  final cards = await ref.watch(creditCardProvider.future);
+  final cardIndex = cards.indexWhere((item) => item.id == cardId);
+  final card = cardIndex >= 0 ? cards[cardIndex] : null;
   final usedCents = await db.getCardUsedLimitForMonth(cardId, month);
-  final balance = await ref.watch(balanceProvider.future);
-  final dynamicLimitCents = balance.availableCents > 0 ? balance.availableCents : 0;
+  final dynamicLimitCents = card?.totalLimitCents ?? 0;
 
   return CardLimitDetails(
     usedCents: usedCents,

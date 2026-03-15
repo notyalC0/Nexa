@@ -285,11 +285,7 @@ class _TransactionsPageState extends ConsumerState<_TransactionsPage> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text('R\$ ',
-                        style: TextStyle(
-                            color: colorScheme.onPrimary.withOpacity(0.8),
-                            fontSize: 18,
-                            fontWeight: FontWeight.w500)),
+                    
                     Text(hideBalance ? '••••' : CurrencyFormatter.format(availableCents),
                         style: TextStyle(
                             color: colorScheme.onPrimary,
@@ -408,6 +404,10 @@ class _TransactionsPageState extends ConsumerState<_TransactionsPage> {
       },
     );
   }
+}
+
+extension on AsyncValue<AppSettingsState> {
+  get valueOrNull => null;
 }
 
 // ---------------------------------------------------------------------------
