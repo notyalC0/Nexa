@@ -12,6 +12,7 @@ void main() async {
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
   final db = DatabaseHelper.instance;
+  await db.removeDuplicateCategories();
   final categories = await db.getCategories();
   final defaultCategories = [
     Categories(

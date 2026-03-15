@@ -173,7 +173,7 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
             status: _selectedStatus ?? 'confirmed', // nullable — sem !
             description: _descriptionController.text,
             date: DateFormat('yyyy-MM-dd').format(parcelaDate),
-            categoryID: _selectedCategoryId ?? 1,
+            categoryID: _selectedCategoryId!,
             creditCardsId: _selectedCardId,
             installmentTotal: totalParcelas,
             installmentCurrent: i + 1,
@@ -201,7 +201,7 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
           description: _descriptionController.text,
           date:
               _selectedDateForDb ?? _dateController.text, // formato yyyy-MM-dd
-          categoryID: _selectedCategoryId ?? 1,
+          categoryID: _selectedCategoryId!,
           creditCardsId: _selectedCardId,
           isRecurring: _isRecurring,
           createdFromNotification: false,
@@ -317,6 +317,9 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
                 return Expanded(
                   child: GestureDetector(
                     onTap: () => setState(() {
+                      if (_selectedType != type.value) {
+                        _selectedCategoryId = null;
+                      }
                       _selectedType = type.value;
                       _triedToSave = false;
                     }),
@@ -520,7 +523,14 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
                 hint: const Text('Sem categorias'),
               ),
               data: (categories) {
-                final selectedExists = categories
+                final selectedType = _selectedType;
+                final filteredCategories = selectedType == null
+                    ? categories
+                    : categories
+                        .where((category) => category.type == selectedType)
+                        .toList(growable: false);
+
+                final selectedExists = filteredCategories
                     .any((category) => category.id == _selectedCategoryId);
                 final dropdownValue = selectedExists ? _selectedCategoryId : null;
 
@@ -528,18 +538,25 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
                   decoration:
                       _fieldDecoration('Categoria', icon: Icons.category_rounded),
                   value: dropdownValue,
-                  onChanged: (value) => setState(() => _selectedCategoryId = value),
-                  hint: const Text('Selecione uma categoria'),
+                  onChanged: selectedType == null
+                      ? null
+                      : (value) => setState(() => _selectedCategoryId = value),
+                  hint: Text(
+                    selectedType == null
+                        ? 'Selecione um tipo primeiro'
+                        : 'Selecione uma categoria',
+                  ),
                   validator: (value) {
+                    if (selectedType == null) return 'Selecione um tipo';
                     if (value == null) return 'Selecione uma categoria';
                     return null;
                   },
-                  items: categories
+                  items: filteredCategories
                       .map((category) => DropdownMenuItem(
                             value: category.id,
                             child: Text(category.name),
                           ))
-                      .toList(),
+                      .toList(growable: false),
                 );
               },
             ),
