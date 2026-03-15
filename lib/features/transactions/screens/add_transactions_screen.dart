@@ -39,8 +39,6 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
         'expense', 'Despesa', Icons.arrow_downward_rounded, Colors.redAccent),
     _TransactionType(
         'income', 'Receita', Icons.arrow_upward_rounded, Color(0xFF2ECC71)),
-    _TransactionType('investment', 'Investimento', Icons.trending_up_rounded,
-        Colors.blueAccent),
   ];
 
   @override
