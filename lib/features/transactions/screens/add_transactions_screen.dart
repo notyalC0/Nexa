@@ -9,6 +9,7 @@ import 'package:nexa/features/home/provider/balance_provider.dart';
 import 'package:nexa/features/home/provider/health_score_provider.dart';
 import 'package:nexa/features/transactions/providers/transactions_provider.dart';
 import 'package:uuid/uuid.dart';
+import '../../../core/models/categories.dart';
 import '../../../core/models/transactions.dart';
 
 class AddTransactionsScreen extends ConsumerStatefulWidget {
@@ -41,6 +42,21 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
     _TransactionType(
         'income', 'Receita', Icons.arrow_upward_rounded, Color(0xFF2ECC71)),
   ];
+
+  int? _resolveCategoryId(List<Categories> categories) {
+    if (_selectedCategoryId != null &&
+        categories.any((category) => category.id == _selectedCategoryId)) {
+      return _selectedCategoryId;
+    }
+
+    for (final category in categories) {
+      if (category.name.toLowerCase() == 'sem categoria') {
+        return category.id;
+      }
+    }
+
+    return categories.isNotEmpty ? categories.first.id : null;
+  }
 
   @override
   void initState() {
@@ -151,6 +167,22 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
     setState(() => _triedToSave = true);
     if (_selectedType == null) return;
     if (_formKey.currentState!.validate()) {
+      final categories = await DatabaseHelper.instance.getCategories();
+      final resolvedCategoryId = _resolveCategoryId(categories);
+
+      if (resolvedCategoryId == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Nenhuma categoria disponível.'),
+            ),
+          );
+        }
+        return;
+      }
+
+      _selectedCategoryId = resolvedCategoryId;
+
       final amount =
           (double.parse(_amountController.text.replaceAll(',', '.')) * 100)
               .toInt();
@@ -173,7 +205,7 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
             status: _selectedStatus ?? 'confirmed', // nullable — sem !
             description: _descriptionController.text,
             date: DateFormat('yyyy-MM-dd').format(parcelaDate),
-            categoryID: _selectedCategoryId!,
+            categoryID: resolvedCategoryId,
             creditCardsId: _selectedCardId,
             installmentTotal: totalParcelas,
             installmentCurrent: i + 1,
@@ -201,7 +233,7 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
           description: _descriptionController.text,
           date:
               _selectedDateForDb ?? _dateController.text, // formato yyyy-MM-dd
-          categoryID: _selectedCategoryId!,
+          categoryID: resolvedCategoryId,
           creditCardsId: _selectedCardId,
           isRecurring: _isRecurring,
           createdFromNotification: false,
@@ -317,9 +349,6 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
                 return Expanded(
                   child: GestureDetector(
                     onTap: () => setState(() {
-                      if (_selectedType != type.value) {
-                        _selectedCategoryId = null;
-                      }
                       _selectedType = type.value;
                       _triedToSave = false;
                     }),
@@ -523,14 +552,7 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
                 hint: const Text('Sem categorias'),
               ),
               data: (categories) {
-                final selectedType = _selectedType;
-                final filteredCategories = selectedType == null
-                    ? categories
-                    : categories
-                        .where((category) => category.type == selectedType)
-                        .toList(growable: false);
-
-                final selectedExists = filteredCategories
+                final selectedExists = categories
                     .any((category) => category.id == _selectedCategoryId);
                 final dropdownValue = selectedExists ? _selectedCategoryId : null;
 
@@ -538,20 +560,10 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
                   decoration:
                       _fieldDecoration('Categoria', icon: Icons.category_rounded),
                   value: dropdownValue,
-                  onChanged: selectedType == null
-                      ? null
-                      : (value) => setState(() => _selectedCategoryId = value),
-                  hint: Text(
-                    selectedType == null
-                        ? 'Selecione um tipo primeiro'
-                        : 'Selecione uma categoria',
-                  ),
-                  validator: (value) {
-                    if (selectedType == null) return 'Selecione um tipo';
-                    if (value == null) return 'Selecione uma categoria';
-                    return null;
-                  },
-                  items: filteredCategories
+                  onChanged: (value) => setState(() => _selectedCategoryId = value),
+                  hint: const Text('Selecione uma categoria (opcional)'),
+                  validator: (_) => null,
+                  items: categories
                       .map((category) => DropdownMenuItem(
                             value: category.id,
                             child: Text(category.name),
