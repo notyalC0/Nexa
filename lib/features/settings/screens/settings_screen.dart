@@ -246,7 +246,9 @@ class SettingsScreen extends ConsumerWidget {
           ElevatedButton(
             onPressed: () async {
               await DatabaseHelper.instance.clearAllData();
+              ref.invalidate(categoriesProvider);
               ref.invalidate(transactionsProvider);
+              ref.invalidate(transactionsByMonthProvider);
               ref.invalidate(creditCardProvider);
               ref.invalidate(balanceProvider);
               ref.invalidate(healthScoreProvider);
