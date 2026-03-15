@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import 'package:nexa/core/database/database_helper.dart';
+import 'package:nexa/core/models/categories.dart';
 import 'package:nexa/core/theme/app_theme.dart';
 import 'package:nexa/core/utils/currency_formatter.dart';
 import 'package:nexa/features/cards/providers/cards_provider.dart';
@@ -118,6 +119,84 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Future<void> _showManageCategoriesDialog(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final colorScheme = Theme.of(context).colorScheme;
+    final controller = TextEditingController();
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTheme.radiusModal)),
+        backgroundColor: colorScheme.surface,
+        title: const Text('Nova categoria'),
+        content: TextField(
+          controller: controller,
+          textCapitalization: TextCapitalization.sentences,
+          decoration:
+              const InputDecoration(labelText: 'Nome da categoria'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final name = controller.text.trim();
+              if (name.isEmpty) return;
+
+              final existingCategories =
+                  await DatabaseHelper.instance.getCategories();
+              final alreadyExists = existingCategories.any(
+                (category) => category.name.toLowerCase() == name.toLowerCase(),
+              );
+
+              if (alreadyExists) {
+                if (ctx.mounted) {
+                  Navigator.pop(ctx);
+                }
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Essa categoria já existe.'),
+                    ),
+                  );
+                }
+                return;
+              }
+
+              await DatabaseHelper.instance.insertCategory(
+                Categories(
+                  name: name,
+                  icon: 'label',
+                  colorHex: '#5B5F97',
+                  type: 'expense',
+                ),
+              );
+
+              ref.invalidate(categoriesProvider);
+              if (ctx.mounted) {
+                Navigator.pop(ctx);
+              }
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Categoria "$name" adicionada com sucesso!'),
+                  ),
+                );
+              }
+            },
+            child: const Text('Adicionar'),
+          ),
+        ],
       ),
     );
   }
@@ -290,17 +369,15 @@ class SettingsScreen extends ConsumerWidget {
               ),
             ),
             const Gap(24),
-            _SectionHeader(label: 'Preferências'),
+            _SectionHeader(label: 'Gerenciar Categorias'),
             const Gap(10),
             _SettingsTile(
-              icon: Icons.attach_money_rounded,
-              title: 'Moeda',
-              subtitle: settings.selectedCurrency == 'BRL'
-                  ? 'Real Brasileiro (R\$)'
-                  : settings.selectedCurrency,
+              icon: Icons.category_rounded,
+              title: 'Adicionar categoria',
+              subtitle: 'Crie categorias personalizadas para transações',
               trailing: Icon(Icons.chevron_right_rounded,
                   color: colorScheme.onSurface.withOpacity(0.35)),
-              onTap: () => _showCurrencyPicker(context, colorScheme, ref),
+              onTap: () => _showManageCategoriesDialog(context, ref),
             ),
             const Gap(24),
             _SectionHeader(label: 'Dados'),
@@ -373,79 +450,6 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  void _showCurrencyPicker(
-      BuildContext context, ColorScheme colorScheme, WidgetRef ref) {
-    final currencies = [
-      {'code': 'BRL', 'name': 'Real Brasileiro', 'symbol': 'R\$'},
-      {'code': 'USD', 'name': 'Dólar Americano', 'symbol': '\$'},
-      {'code': 'EUR', 'name': 'Euro', 'symbol': '€'},
-    ];
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(AppTheme.radiusModal)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 36,
-              height: 4,
-              margin: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                  color: colorScheme.onSurface.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(2)),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: AppTheme.paddingScreen, vertical: 4),
-              child: Text('Selecionar moeda',
-                  style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: colorScheme.onSurface)),
-            ),
-            const Divider(height: 16),
-            ...currencies.map((c) => ListTile(
-                  leading: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                        color: colorScheme.primary.withOpacity(0.08),
-                        borderRadius:
-                            BorderRadius.circular(AppTheme.radiusChip)),
-                    child: Center(
-                        child: Text(c['symbol'] ?? '',
-                            style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: colorScheme.primary))),
-                  ),
-                  title: Text(c['code'] ?? '',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: colorScheme.onSurface)),
-                  subtitle: Text(c['name'] ?? '',
-                      style: TextStyle(
-                          fontSize: 12,
-                          color: colorScheme.onSurface.withOpacity(0.5))),
-                  onTap: () async {
-                    await ref
-                        .read(appSettingsProvider.notifier)
-                        .saveStringSetting('selected_currency', c['code'] ?? 'BRL');
-                    if (context.mounted) Navigator.pop(ctx);
-                  },
-                )),
-            const Gap(8),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _SectionHeader extends StatelessWidget {
