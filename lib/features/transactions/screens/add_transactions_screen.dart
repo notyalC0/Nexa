@@ -220,6 +220,7 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
             await DatabaseHelper.instance.insertTransaction(transaction);
           }
         }
+        ref.invalidate(transactionsByMonthProvider);
         ref.invalidate(transactionsProvider);
         ref.invalidate(healthScoreProvider);
         ref.invalidate(balanceProvider);
@@ -245,6 +246,7 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
         } else {
           await DatabaseHelper.instance.insertTransaction(transaction);
         }
+        ref.invalidate(transactionsByMonthProvider);
         ref.invalidate(transactionsProvider);
         ref.invalidate(balanceProvider);
         ref.invalidate(healthScoreProvider);

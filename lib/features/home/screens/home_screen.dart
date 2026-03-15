@@ -484,6 +484,7 @@ class _TransactionsPageState extends ConsumerState<_TransactionsPage> {
               onDeleteWithContext: (dialogContext) =>
                   _handleDeleteTransaction(dialogContext, filtered[index]),
               onDelete: () {
+                ref.invalidate(transactionsByMonthProvider);
                 ref.invalidate(transactionsProvider);
                 ref.invalidate(healthScoreProvider);
                 ref.invalidate(balanceProvider);
