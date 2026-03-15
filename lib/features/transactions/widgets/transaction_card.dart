@@ -7,12 +7,14 @@ class TransactionCard extends StatelessWidget {
   final Transactions transaction;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
+  final Future<bool> Function(BuildContext context)? onDeleteWithContext;
 
   const TransactionCard({
     super.key,
     required this.transaction,
     this.onEdit,
     this.onDelete,
+    this.onDeleteWithContext,
   });
 
   Color _getTypeColor() {
@@ -271,8 +273,10 @@ class TransactionCard extends StatelessWidget {
                         color: colorScheme.onSurface.withOpacity(0.5))),
                 onTap: () async {
                   Navigator.of(ctx).pop();
-                  final confirmed = await _confirmDelete(context);
-                  if (confirmed) onDelete?.call();
+                  final shouldDelete = onDeleteWithContext != null
+                      ? await onDeleteWithContext!(context)
+                      : await _confirmDelete(context);
+                  if (shouldDelete) onDelete?.call();
                 },
               ),
               const SizedBox(height: 8),
@@ -318,7 +322,12 @@ class TransactionCard extends StatelessWidget {
           ],
         ),
       ),
-      confirmDismiss: (_) => _confirmDelete(context),
+      confirmDismiss: (_) async {
+        if (onDeleteWithContext != null) {
+          return onDeleteWithContext!(context);
+        }
+        return _confirmDelete(context);
+      },
       onDismissed: (_) => onDelete?.call(),
       child: Container(
         margin: const EdgeInsets.symmetric(

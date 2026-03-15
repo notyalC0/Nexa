@@ -38,18 +38,19 @@ class MyApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(appSettingsProvider);
+    final themeMode = settings.maybeWhen(
+      data: (value) => value.themeMode,
+      orElse: () => ThemeMode.system,
+    );
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Nexa',
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
-      themeMode: settings.valueOrNull?.themeMode ?? ThemeMode.system,
+      themeMode: themeMode,
       home: const HomeScreen(),
     );
   }
 }
 
-extension on AsyncValue<AppSettingsState> {
-  get valueOrNull => null;
-}

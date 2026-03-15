@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import 'package:nexa/core/database/database_helper.dart';
+import 'package:nexa/core/models/transactions.dart';
 import 'package:nexa/core/theme/app_theme.dart';
 import 'package:nexa/core/utils/currency_formatter.dart';
 import 'package:nexa/features/cards/screens/card_screen.dart';
@@ -146,7 +147,11 @@ class _TransactionsPageState extends ConsumerState<_TransactionsPage> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final balanceAsync = ref.watch(balanceProvider);
-    final hideBalance = ref.watch(appSettingsProvider).valueOrNull?.hideBalance ?? false;
+    final settingsAsync = ref.watch(appSettingsProvider);
+    final hideBalance = settingsAsync.maybeWhen(
+      data: (value) => value.hideBalance,
+      orElse: () => false,
+    );
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
@@ -224,6 +229,80 @@ class _TransactionsPageState extends ConsumerState<_TransactionsPage> {
         ],
       ),
     );
+  }
+
+
+
+  Future<bool> _confirmDeleteSingleTransaction(BuildContext context) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Excluir transação'),
+        content: const Text('Tem certeza que deseja excluir esta transação?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+
+    return result == true;
+  }
+
+  Future<bool> _handleDeleteTransaction(BuildContext context, Transactions transaction) async {
+    final canDeleteInstallmentsTogether =
+        transaction.creditCardsId != null &&
+        (transaction.installmentTotal ?? 1) > 1 &&
+        (transaction.installmentGroupId?.isNotEmpty ?? false);
+
+    if (!canDeleteInstallmentsTogether) {
+      final confirmed = await _confirmDeleteSingleTransaction(context);
+      if (!confirmed) return false;
+
+      await DatabaseHelper.instance.deleteTransaction(transaction.id!);
+      return true;
+    }
+
+    final deleteOption = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Excluir compra parcelada'),
+        content: const Text('Deseja excluir somente esta parcela ou todas as parcelas desta compra no cartão?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'current'),
+            child: const Text('Só parcela atual'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, 'all'),
+            child: const Text('Todas parcelas'),
+          ),
+        ],
+      ),
+    );
+
+    if (deleteOption == 'current') {
+      await DatabaseHelper.instance.deleteTransaction(transaction.id!);
+      return true;
+    }
+
+    if (deleteOption == 'all') {
+      await DatabaseHelper.instance
+          .deleteGroupTransaction(transaction.installmentGroupId!);
+      return true;
+    }
+
+    return false;
   }
 
   Widget _buildHeader(
@@ -391,8 +470,9 @@ class _TransactionsPageState extends ConsumerState<_TransactionsPage> {
                       AddTransactionsScreen(transaction: filtered[index]),
                 ),
               ),
-              onDelete: () async {
-                DatabaseHelper.instance.deleteTransaction(filtered[index].id!);
+              onDeleteWithContext: (dialogContext) =>
+                  _handleDeleteTransaction(dialogContext, filtered[index]),
+              onDelete: () {
                 ref.invalidate(transactionsProvider);
                 ref.invalidate(healthScoreProvider);
                 ref.invalidate(balanceProvider);
@@ -404,10 +484,6 @@ class _TransactionsPageState extends ConsumerState<_TransactionsPage> {
       },
     );
   }
-}
-
-extension on AsyncValue<AppSettingsState> {
-  get valueOrNull => null;
 }
 
 // ---------------------------------------------------------------------------
