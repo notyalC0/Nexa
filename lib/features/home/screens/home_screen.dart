@@ -82,18 +82,35 @@ class _TransactionsPageState extends ConsumerState<_TransactionsPage> {
     super.initState();
     final now = DateTime.now();
     _selectedMonth = DateTime(now.year, now.month);
+
+    Future.microtask(() {
+      if (!mounted) return;
+      ref.read(selectedMonthProvider.notifier).state =
+          _formatMonth(_selectedMonth);
+    });
+  }
+
+  String _formatMonth(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}';
+  }
+
+  void _updateSelectedMonth(DateTime month) {
+    setState(() {
+      _selectedMonth = month;
+    });
+    ref.read(selectedMonthProvider.notifier).state = _formatMonth(month);
   }
 
   void _previousMonth() {
-    setState(() {
-      _selectedMonth = DateTime(_selectedMonth.year, _selectedMonth.month - 1);
-    });
+    _updateSelectedMonth(
+      DateTime(_selectedMonth.year, _selectedMonth.month - 1),
+    );
   }
 
   void _nextMonth() {
-    setState(() {
-      _selectedMonth = DateTime(_selectedMonth.year, _selectedMonth.month + 1);
-    });
+    _updateSelectedMonth(
+      DateTime(_selectedMonth.year, _selectedMonth.month + 1),
+    );
   }
 
   bool get _isFutureMonth {

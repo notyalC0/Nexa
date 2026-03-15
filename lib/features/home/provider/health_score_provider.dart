@@ -1,9 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:nexa/features/transactions/providers/transactions_provider.dart';
 import '../../../core/database/database_helper.dart';
 
 final healthScoreProvider = FutureProvider<int>((ref) async {
-  final now = DateTime.now();
-  final month = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+  final month = ref.watch(selectedMonthProvider);
   final db = DatabaseHelper.instance;
 
   final salaryRaw = await db.getSetting('monthly_salary_cents');
