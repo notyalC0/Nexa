@@ -22,9 +22,17 @@ class DatabaseHelper {
     final path = join(await getDatabasesPath(), 'nexa.db');
     return openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _createTables,
+      onUpgrade: _onUpgrade,
     );
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await _removeDuplicateCategoriesFromDb(db);
+      await _createIndexes(db);
+    }
   }
 
   Future<void> _createTables(Database db, int version) async {
@@ -77,6 +85,59 @@ class DatabaseHelper {
         update_at TEXT
         )
   ''');
+    await _removeDuplicateCategoriesFromDb(db);
+    await _createIndexes(db);
+  }
+
+  Future<void> _createIndexes(Database db) async {
+    await db.execute('''
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_name_type_unique
+      ON categories(name, type)
+    ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_transactions_date
+      ON transactions(date)
+    ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_transactions_type_status_date
+      ON transactions(type, status, date)
+    ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_transactions_card_date
+      ON transactions(credit_cards_id, date)
+    ''');
+  }
+
+  Future<void> _removeDuplicateCategoriesFromDb(DatabaseExecutor db) async {
+    await db.execute('''
+      DELETE FROM categories
+      WHERE id NOT IN (
+        SELECT MIN(id)
+        FROM categories
+        GROUP BY name, type
+      )
+    ''');
+  }
+
+  Future<void> ensureDefaultCategories(List<Categories> defaultCategories) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await _removeDuplicateCategoriesFromDb(txn);
+      final batch = txn.batch();
+
+      for (final category in defaultCategories) {
+        batch.insert(
+          'categories',
+          category.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
+      }
+
+      await batch.commit(noResult: true);
+    });
   }
 
 //queries
@@ -84,26 +145,37 @@ class DatabaseHelper {
 //#region Category
   Future<List<Categories>> getCategories() async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query('categories');
+    final List<Map<String, dynamic>> maps = await db.query(
+      'categories',
+      orderBy: 'type ASC, name COLLATE NOCASE ASC',
+    );
     return List.generate(maps.length, (i) => Categories.fromMap(maps[i]));
   }
 
   Future<int> insertCategory(Categories categories) async {
     final db = await database;
-    return db.insert('categories', categories.toMap());
+    return db.insert(
+      'categories',
+      categories.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
   }
+
 //#endregion
 
 //#region Transactions
   Future<List<Transactions>> getTransactionsByMonth(String month) async {
     final db = await database;
-    debugPrint('Buscando mês: $month');
     final maps = await db.query(
       'transactions',
       where: 'date LIKE ?',
       whereArgs: ['$month%'],
+      orderBy: 'date DESC, id DESC',
     );
-    debugPrint('Encontrou: ${maps.length} transações');
+    if (kDebugMode) {
+      debugPrint('Buscando mês: $month');
+      debugPrint('Encontrou: ${maps.length} transações');
+    }
     return List.generate(maps.length, (i) => Transactions.fromMap(maps[i]));
   }
 

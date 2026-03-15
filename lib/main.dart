@@ -12,7 +12,6 @@ void main() async {
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
   final db = DatabaseHelper.instance;
-  final categories = await db.getCategories();
   final defaultCategories = [
     Categories(
       name: 'Alimentação',
@@ -44,12 +43,7 @@ void main() async {
     ),
   ];
 
-  for (final category in defaultCategories) {
-    if (!categories
-        .any((c) => c.name == category.name && c.type == category.type)) {
-      await db.insertCategory(category);
-    }
-  }
+  await db.ensureDefaultCategories(defaultCategories);
 
   FlutterNativeSplash.remove();
 

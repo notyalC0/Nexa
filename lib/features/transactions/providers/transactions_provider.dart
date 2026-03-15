@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 import 'package:nexa/core/models/categories.dart';
 import 'package:nexa/core/models/transactions.dart';
 import '../../../core/database/database_helper.dart';
