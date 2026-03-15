@@ -9,6 +9,7 @@ import 'package:nexa/features/cards/screens/card_screen.dart';
 import 'package:nexa/features/home/provider/balance_provider.dart';
 import 'package:nexa/features/home/provider/health_score_provider.dart';
 import 'package:nexa/features/home/widgets/health_score_card.dart';
+import 'package:nexa/features/settings/providers/app_settings_provider.dart';
 import 'package:nexa/features/settings/screens/settings_screen.dart';
 import '../../transactions/providers/transactions_provider.dart';
 import '../../transactions/screens/add_transactions_screen.dart';
@@ -74,8 +75,6 @@ class _TransactionsPageState extends ConsumerState<_TransactionsPage> {
         value: 'expense',
         label: 'Despesas',
         icon: Icons.arrow_downward_rounded),
-    _FilterOption(
-        value: 'investment', label: 'Invest.', icon: Icons.trending_up_rounded),
   ];
 
   @override
@@ -130,6 +129,7 @@ class _TransactionsPageState extends ConsumerState<_TransactionsPage> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final balanceAsync = ref.watch(balanceProvider);
+    final hideBalance = ref.watch(appSettingsProvider).valueOrNull?.hideBalance ?? false;
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
@@ -156,19 +156,22 @@ class _TransactionsPageState extends ConsumerState<_TransactionsPage> {
                 projectedCents: 0,
                 incomeCents: 0,
                 expensesCents: 0,
-                isLoading: true),
+                isLoading: true,
+                hideBalance: hideBalance),
             error: (_, __) => _buildHeader(context,
                 availableCents: 0,
                 projectedCents: 0,
                 incomeCents: 0,
                 expensesCents: 0,
-                isLoading: false),
+                isLoading: false,
+                hideBalance: hideBalance),
             data: (balance) => _buildHeader(context,
                 availableCents: balance.availableCents,
                 projectedCents: balance.projectCents,
                 incomeCents: balance.incomeCents,
                 expensesCents: balance.expensesCents,
-                isLoading: false),
+                isLoading: false,
+                hideBalance: hideBalance),
           ),
 
           // Health card
@@ -213,6 +216,7 @@ class _TransactionsPageState extends ConsumerState<_TransactionsPage> {
     required int incomeCents,
     required int expensesCents,
     required bool isLoading,
+    required bool hideBalance,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
 
@@ -269,7 +273,7 @@ class _TransactionsPageState extends ConsumerState<_TransactionsPage> {
                             color: colorScheme.onPrimary.withOpacity(0.8),
                             fontSize: 18,
                             fontWeight: FontWeight.w500)),
-                    Text(CurrencyFormatter.format(availableCents),
+                    Text(hideBalance ? '••••' : CurrencyFormatter.format(availableCents),
                         style: TextStyle(
                             color: colorScheme.onPrimary,
                             fontSize: 32,
@@ -323,7 +327,8 @@ class _TransactionsPageState extends ConsumerState<_TransactionsPage> {
   }
 
   Widget _buildTransactionsList(WidgetRef ref, BuildContext context) {
-    final transactionsAsync = ref.watch(transactionsProvider);
+    final month = '${_selectedMonth.year}-${_selectedMonth.month.toString().padLeft(2, '0')}';
+    final transactionsAsync = ref.watch(transactionsByMonthProvider(month));
 
     return transactionsAsync.when(
       loading: () => const SliverToBoxAdapter(
@@ -342,22 +347,9 @@ class _TransactionsPageState extends ConsumerState<_TransactionsPage> {
         ),
       ),
       data: (transactions) {
-        // Filtra por mês selecionado
-        final byMonth = transactions.where((t) {
-          // Espera formato yyyy-MM-dd no banco
-          try {
-            final date = DateTime.parse(t.date);
-            return date.year == _selectedMonth.year &&
-                date.month == _selectedMonth.month;
-          } catch (_) {
-            return false;
-          }
-        }).toList();
-
-        // Filtra por tipo selecionado
         final filtered = _selectedFilter == null
-            ? byMonth
-            : byMonth.where((t) => t.type == _selectedFilter).toList();
+            ? transactions
+            : transactions.where((t) => t.type == _selectedFilter).toList();
 
         if (filtered.isEmpty) {
           return SliverToBoxAdapter(

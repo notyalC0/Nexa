@@ -4,6 +4,7 @@ import 'package:gap/gap.dart';
 import 'package:nexa/core/database/database_helper.dart';
 import 'package:nexa/core/models/credit_cards.dart';
 import 'package:nexa/core/theme/app_theme.dart';
+import 'package:nexa/core/utils/currency_formatter.dart';
 import 'package:nexa/features/cards/providers/cards_provider.dart';
 
 class CardsScreen extends ConsumerStatefulWidget {
@@ -472,7 +473,7 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
 // Card visual
 // ---------------------------------------------------------------------------
 
-class _CreditCardWidget extends StatelessWidget {
+class _CreditCardWidget extends ConsumerWidget {
   final CreditCards card;
   final Color baseColor;
   final Color darkColor;
@@ -488,9 +489,15 @@ class _CreditCardWidget extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final detailsAsync = card.id == null
+        ? const AsyncValue<CardLimitDetails>.data(
+            CardLimitDetails(usedCents: 0, dynamicLimitCents: 0),
+          )
+        : ref.watch(cardLimitDetailsProvider(card.id!));
+
     return Container(
-      height: 190,
+      height: 220,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -508,7 +515,6 @@ class _CreditCardWidget extends StatelessWidget {
       ),
       child: Stack(
         children: [
-          // Círculos decorativos
           Positioned(
               right: -30,
               top: -30,
@@ -527,13 +533,11 @@ class _CreditCardWidget extends StatelessWidget {
                   decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.04),
                       shape: BoxShape.circle))),
-          // Conteúdo
           Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Nome + botões
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -545,39 +549,83 @@ class _CreditCardWidget extends StatelessWidget {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        _CardIconButton(
-                            icon: Icons.edit_outlined, onTap: onEdit),
+                        _CardIconButton(icon: Icons.edit_outlined, onTap: onEdit),
                         const SizedBox(width: 8),
                         _CardIconButton(
-                            icon: Icons.delete_outline_rounded,
-                            onTap: onDelete),
+                            icon: Icons.delete_outline_rounded, onTap: onDelete),
                       ],
                     ),
                   ],
                 ),
                 const Spacer(),
-                // Banco keyword
                 Text(card.bankKeyword.toUpperCase(),
                     style: TextStyle(
                         fontSize: 11,
                         color: Colors.white.withOpacity(0.55),
                         letterSpacing: 1.5,
                         fontWeight: FontWeight.w600)),
-                const Gap(4),
-                // Limite
-                Text(_formatCents(card.totalLimitCents),
-                    style: const TextStyle(
-                        fontSize: 20,
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.5)),
+                const Gap(6),
+                detailsAsync.when(
+                  loading: () => const LinearProgressIndicator(
+                    minHeight: 6,
+                    value: null,
+                    backgroundColor: Colors.white24,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                  error: (_, __) => Text(
+                    'Limite indisponível',
+                    style: TextStyle(color: Colors.white.withOpacity(0.8)),
+                  ),
+                  data: (details) {
+                    final total = details.dynamicLimitCents;
+                    final used = details.usedCents;
+                    final available = details.availableCents;
+                    final percent = (details.usedPercent * 100).toStringAsFixed(0);
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Limite dinâmico: ${CurrencyFormatter.format(total)}',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                        ),
+                        const Gap(6),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: LinearProgressIndicator(
+                            minHeight: 7,
+                            value: details.usedPercent,
+                            backgroundColor: Colors.white24,
+                            valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        ),
+                        const Gap(8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Usado: ${CurrencyFormatter.format(used)}',
+                                style: TextStyle(
+                                    color: Colors.white.withOpacity(0.9), fontSize: 12)),
+                            Text('Disponível: ${CurrencyFormatter.format(available)}',
+                                style: TextStyle(
+                                    color: Colors.white.withOpacity(0.9), fontSize: 12)),
+                          ],
+                        ),
+                        const Gap(4),
+                        Text('$percent% utilizado',
+                            style: TextStyle(
+                                color: Colors.white.withOpacity(0.85),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600)),
+                      ],
+                    );
+                  },
+                ),
                 const Gap(10),
-                // Fechamento e vencimento
                 Row(
                   children: [
                     _CardInfoPill(
-                        label: 'Fecha dia ${card.closingDay}',
-                        icon: Icons.event_rounded),
+                        label: 'Fecha dia ${card.closingDay}', icon: Icons.event_rounded),
                     const SizedBox(width: 8),
                     _CardInfoPill(
                         label: 'Vence dia ${card.dueDay}',
@@ -590,11 +638,6 @@ class _CreditCardWidget extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  String _formatCents(int cents) {
-    final v = cents / 100;
-    return 'R\$ ${v.toStringAsFixed(2).replaceAll('.', ',')}';
   }
 }
 
@@ -654,15 +697,20 @@ class _CardInfoPill extends StatelessWidget {
 // Tile de resumo
 // ---------------------------------------------------------------------------
 
-class _CardSummaryTile extends StatelessWidget {
+class _CardSummaryTile extends ConsumerWidget {
   final CreditCards card;
   final Color baseColor;
 
   const _CardSummaryTile({required this.card, required this.baseColor});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colorScheme = Theme.of(context).colorScheme;
+    final detailsAsync = card.id == null
+        ? const AsyncValue<CardLimitDetails>.data(
+            CardLimitDetails(usedCents: 0, dynamicLimitCents: 0),
+          )
+        : ref.watch(cardLimitDetailsProvider(card.id!));
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -685,49 +733,41 @@ class _CardSummaryTile extends StatelessWidget {
           ),
           const Gap(12),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(card.name,
-                        style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: colorScheme.onSurface)),
-                    Text(_formatCents(card.totalLimitCents),
-                        style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: colorScheme.onSurface)),
-                  ],
-                ),
-                const Gap(4),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Fecha dia ${card.closingDay}',
-                        style: TextStyle(
-                            fontSize: 12,
-                            color: colorScheme.onSurface.withOpacity(0.5))),
-                    Text('Vence dia ${card.dueDay}',
-                        style: TextStyle(
-                            fontSize: 12,
-                            color: colorScheme.onSurface.withOpacity(0.5))),
-                  ],
-                ),
-              ],
+            child: detailsAsync.when(
+              loading: () => const LinearProgressIndicator(minHeight: 4),
+              error: (_, __) => Text(card.name),
+              data: (details) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(card.name,
+                          style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: colorScheme.onSurface)),
+                      Text('${(details.usedPercent * 100).toStringAsFixed(0)}%',
+                          style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: colorScheme.onSurface)),
+                    ],
+                  ),
+                  const Gap(4),
+                  Text(
+                    'Disponível: ${CurrencyFormatter.format(details.availableCents)} · Usado: ${CurrencyFormatter.format(details.usedCents)}',
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: colorScheme.onSurface.withOpacity(0.55)),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
       ),
     );
-  }
-
-  String _formatCents(int cents) {
-    final v = cents / 100;
-    return 'R\$ ${v.toStringAsFixed(2).replaceAll('.', ',')}';
   }
 }
 

@@ -176,6 +176,28 @@ class DatabaseHelper {
   }
 //#endregion
 
+  Future<int> getCardUsedLimitForMonth(int cardId, String month) async {
+    final db = await database;
+    final result = await db.rawQuery('''
+    SELECT SUM(amount_cents) as total FROM transactions
+    WHERE type = 'expense'
+    AND credit_cards_id = ?
+    AND status IN ('confirmed', 'pending')
+    AND date LIKE ?
+  ''', [cardId, '$month%']);
+
+    return result.first['total'] as int? ?? 0;
+  }
+
+  Future<void> clearAllData() async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.delete('transactions');
+      await txn.delete('credit_cards');
+      await txn.delete('settings');
+    });
+  }
+
   Future<String?> getSetting(String key) async {
     final db = await database;
     final maps = await db.query(

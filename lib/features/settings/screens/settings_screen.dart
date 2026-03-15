@@ -4,50 +4,16 @@ import 'package:gap/gap.dart';
 import 'package:nexa/core/database/database_helper.dart';
 import 'package:nexa/core/theme/app_theme.dart';
 import 'package:nexa/core/utils/currency_formatter.dart';
+import 'package:nexa/features/cards/providers/cards_provider.dart';
+import 'package:nexa/features/home/provider/balance_provider.dart';
 import 'package:nexa/features/home/provider/health_score_provider.dart';
+import 'package:nexa/features/settings/providers/app_settings_provider.dart';
+import 'package:nexa/features/transactions/providers/transactions_provider.dart';
 
-class SettingsScreen extends ConsumerStatefulWidget {
+class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
-  @override
-  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
-}
-
-class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  int _salaryCents = 0;
-  int _emergencyGoalCents = 0;
-  int _emergencyCurrentCents = 0;
-  int _alertThreshold = 75;
-  bool _notificationsEnabled = true;
-  bool _darkMode = false;
-  bool _hideBalance = false;
-  String _selectedCurrency = 'BRL';
-
-  @override
-  void initState() {
-    super.initState();
-    _loadSettings();
-  }
-
-  Future<void> _loadSettings() async {
-    final salary =
-        await DatabaseHelper.instance.getSetting('monthly_salary_cents');
-    final goal =
-        await DatabaseHelper.instance.getSetting('emergency_goal_cents');
-    final current =
-        await DatabaseHelper.instance.getSetting('emergency_current_cents');
-    final alert =
-        await DatabaseHelper.instance.getSetting('health_alert_threshold');
-
-    setState(() {
-      _salaryCents = int.tryParse(salary ?? '0') ?? 0;
-      _emergencyGoalCents = int.tryParse(goal ?? '0') ?? 0;
-      _emergencyCurrentCents = int.tryParse(current ?? '0') ?? 0;
-      _alertThreshold = int.tryParse(alert ?? '80') ?? 80;
-    });
-  }
-
-  void _showAboutDialog() {
+  void _showAboutDialog(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     showDialog(
       context: context,
@@ -100,7 +66,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  void _showFinancialSheet(String key, String title) {
+  void _showFinancialSheet(
+    BuildContext context,
+    WidgetRef ref,
+    String key,
+    String title,
+  ) {
     final controller = TextEditingController();
 
     showModalBottomSheet(
@@ -108,40 +79,42 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       isScrollControlled: true,
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(
+          left: AppTheme.paddingScreen,
+          right: AppTheme.paddingScreen,
+          top: 20,
           bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              title,
-            ),
+            Text(title),
             const Gap(16),
             TextField(
               controller: controller,
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 prefixText: 'R\$ ',
                 labelText: 'Valor',
               ),
             ),
             const Gap(16),
-            ElevatedButton(
-              onPressed: () async {
-                final value =
-                    double.tryParse(controller.text.replaceAll(',', '.')) ?? 0;
-                final cents = (value * 100).toInt();
-                await DatabaseHelper.instance
-                    .saveSetting(key, cents.toString());
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () async {
+                  final value =
+                      double.tryParse(controller.text.replaceAll(',', '.')) ?? 0;
+                  final cents = (value * 100).toInt();
+                  await ref
+                      .read(appSettingsProvider.notifier)
+                      .saveMoneySetting(key, cents);
 
-                Navigator.pop(ctx);
-                if (mounted) {
-                  await _loadSettings();
-                  ref.invalidate(healthScoreProvider); // ← depois de fechar
-                }
-              },
-              child: const Text('Salvar'),
+                  ref.invalidate(healthScoreProvider);
+                  if (context.mounted) Navigator.pop(ctx);
+                },
+                child: const Text('Salvar'),
+              ),
             ),
           ],
         ),
@@ -149,7 +122,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  void _showClearDataConfirm() {
+  void _showClearDataConfirm(BuildContext context, WidgetRef ref) {
     final colorScheme = Theme.of(context).colorScheme;
     showDialog(
       context: context,
@@ -192,9 +165,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 style: TextStyle(fontWeight: FontWeight.w600)),
           ),
           ElevatedButton(
-            onPressed: () {
-              // TODO: limpar banco
-              Navigator.pop(ctx);
+            onPressed: () async {
+              await DatabaseHelper.instance.clearAllData();
+              ref.invalidate(transactionsProvider);
+              ref.invalidate(creditCardProvider);
+              ref.invalidate(balanceProvider);
+              ref.invalidate(healthScoreProvider);
+              ref.invalidate(appSettingsProvider);
+              if (context.mounted) Navigator.pop(ctx);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: colorScheme.error,
@@ -212,178 +190,144 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colorScheme = Theme.of(context).colorScheme;
+    final settingsAsync = ref.watch(appSettingsProvider);
 
-    return Scaffold(
-      backgroundColor: colorScheme.surface,
-      appBar: AppBar(
+    return settingsAsync.when(
+      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
+      error: (e, _) => Scaffold(body: Center(child: Text('Erro: $e'))),
+      data: (settings) => Scaffold(
         backgroundColor: colorScheme.surface,
-        elevation: 0,
-        centerTitle: false,
-        title: Text('Configurações',
-            style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: colorScheme.onSurface)),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(
-            AppTheme.paddingScreen, 8, AppTheme.paddingScreen, 40),
-        children: [
-          // --- Perfil ---
-          _buildProfileCard(colorScheme),
-          const Gap(24),
-
-          // --- Finanças ---
-          _SectionHeader(label: 'Finanças'),
-          const Gap(10),
-          _SettingsTile(
-            icon: Icons.account_balance_wallet_rounded,
-            title: 'Salário mensal',
-            subtitle: _salaryCents == 0
-                ? 'Não configurado'
-                : CurrencyFormatter.format(_salaryCents),
-            trailing: Icon(
-              Icons.chevron_right_rounded,
+        appBar: AppBar(
+          backgroundColor: colorScheme.surface,
+          elevation: 0,
+          centerTitle: false,
+          title: Text('Configurações',
+              style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: colorScheme.onSurface)),
+        ),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(
+              AppTheme.paddingScreen, 8, AppTheme.paddingScreen, 40),
+          children: [
+            _buildProfileCard(colorScheme),
+            const Gap(24),
+            _SectionHeader(label: 'Finanças'),
+            const Gap(10),
+            _SettingsTile(
+              icon: Icons.account_balance_wallet_rounded,
+              title: 'Salário mensal',
+              subtitle: settings.salaryCents == 0
+                  ? 'Não configurado'
+                  : CurrencyFormatter.format(settings.salaryCents),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => _showFinancialSheet(
+                  context, ref, 'monthly_salary_cents', 'Salário mensal'),
             ),
-            onTap: () =>
-                _showFinancialSheet('monthly_salary_cents', 'Salário mensal'),
-          ),
-          _SettingsTile(
-            icon: Icons.savings_rounded,
-            title: 'Meta da reserva',
-            subtitle: _emergencyGoalCents == 0
-                ? 'Não configurado'
-                : CurrencyFormatter.format(_emergencyGoalCents),
-            trailing: Icon(
-              Icons.chevron_right_rounded,
+            _SettingsTile(
+              icon: Icons.savings_rounded,
+              title: 'Meta da reserva',
+              subtitle: settings.emergencyGoalCents == 0
+                  ? 'Não configurado'
+                  : CurrencyFormatter.format(settings.emergencyGoalCents),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => _showFinancialSheet(
+                  context, ref, 'emergency_goal_cents', 'Meta da reserva'),
             ),
-            onTap: () =>
-                _showFinancialSheet('emergency_goal_cents', 'Meta da reserva'),
-          ),
-          _SettingsTile(
-            icon: Icons.savings_rounded,
-            title: 'Reserva Atual',
-            subtitle: _emergencyCurrentCents == 0
-                ? 'Não configurado'
-                : CurrencyFormatter.format(_emergencyCurrentCents),
-            trailing: Icon(
-              Icons.chevron_right_rounded,
+            _SettingsTile(
+              icon: Icons.savings_rounded,
+              title: 'Reserva atual',
+              subtitle: settings.emergencyCurrentCents == 0
+                  ? 'Não configurado'
+                  : CurrencyFormatter.format(settings.emergencyCurrentCents),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => _showFinancialSheet(
+                  context, ref, 'emergency_current_cents', 'Reserva atual'),
             ),
-            onTap: () =>
-                _showFinancialSheet('emergency_current_cents', 'Reserva atual'),
-          ),
-          _SettingsTile(
-            icon: Icons.savings_rounded,
-            title: '% de alerta',
-            subtitle: '$_alertThreshold% do salário',
-            trailing: Icon(
-              Icons.chevron_right_rounded,
+            const Gap(24),
+            _SectionHeader(label: 'Aparência'),
+            const Gap(10),
+            _SettingsTile(
+              icon: Icons.dark_mode_rounded,
+              title: 'Modo escuro',
+              subtitle: 'Ativar tema escuro',
+              trailing: Switch(
+                value: settings.darkMode,
+                onChanged: (v) => ref
+                    .read(appSettingsProvider.notifier)
+                    .saveBoolSetting('dark_mode', v),
+                activeThumbColor: colorScheme.primary,
+              ),
             ),
-            onTap: () => _showFinancialSheet(
-                'health_alert_threshold', 'parametro de alerta'),
-          ),
-          const Gap(24),
-
-          // --- Aparência ---
-          _SectionHeader(label: 'Aparência'),
-          const Gap(10),
-          _SettingsTile(
-            icon: Icons.dark_mode_rounded,
-            title: 'Modo escuro',
-            subtitle: 'Ativar tema escuro',
-            trailing: Switch(
-              value: _darkMode,
-              onChanged: (v) => setState(() => _darkMode = v),
-              activeThumbColor: colorScheme.primary,
+            _SettingsTile(
+              icon: Icons.visibility_off_rounded,
+              title: 'Ocultar saldo',
+              subtitle: 'Esconder valores na tela inicial',
+              trailing: Switch(
+                value: settings.hideBalance,
+                onChanged: (v) => ref
+                    .read(appSettingsProvider.notifier)
+                    .saveBoolSetting('hide_balance', v),
+                activeThumbColor: colorScheme.primary,
+              ),
             ),
-          ),
-          _SettingsTile(
-            icon: Icons.visibility_off_rounded,
-            title: 'Ocultar saldo',
-            subtitle: 'Esconder valores na tela inicial',
-            trailing: Switch(
-              value: _hideBalance,
-              onChanged: (v) => setState(() => _hideBalance = v),
-              activeThumbColor: colorScheme.primary,
+            const Gap(24),
+            _SectionHeader(label: 'Notificações'),
+            const Gap(10),
+            _SettingsTile(
+              icon: Icons.notifications_rounded,
+              title: 'Notificações',
+              subtitle: 'Alertas de transações e vencimentos',
+              trailing: Switch(
+                value: settings.notificationsEnabled,
+                onChanged: (v) => ref
+                    .read(appSettingsProvider.notifier)
+                    .saveBoolSetting('notifications_enabled', v),
+                activeThumbColor: colorScheme.primary,
+              ),
             ),
-          ),
-          const Gap(24),
-
-          // --- Notificações ---
-          _SectionHeader(label: 'Notificações'),
-          const Gap(10),
-          _SettingsTile(
-            icon: Icons.notifications_rounded,
-            title: 'Notificações',
-            subtitle: 'Alertas de transações e vencimentos',
-            trailing: Switch(
-              value: _notificationsEnabled,
-              onChanged: (v) => setState(() => _notificationsEnabled = v),
-              activeThumbColor: colorScheme.primary,
+            const Gap(24),
+            _SectionHeader(label: 'Preferências'),
+            const Gap(10),
+            _SettingsTile(
+              icon: Icons.attach_money_rounded,
+              title: 'Moeda',
+              subtitle: settings.selectedCurrency == 'BRL'
+                  ? 'Real Brasileiro (R\$)'
+                  : settings.selectedCurrency,
+              trailing: Icon(Icons.chevron_right_rounded,
+                  color: colorScheme.onSurface.withOpacity(0.35)),
+              onTap: () => _showCurrencyPicker(context, colorScheme, ref),
             ),
-          ),
-          const Gap(24),
-
-          // --- Preferências ---
-          _SectionHeader(label: 'Preferências'),
-          const Gap(10),
-          _SettingsTile(
-            icon: Icons.attach_money_rounded,
-            title: 'Moeda',
-            subtitle: _selectedCurrency == 'BRL'
-                ? 'Real Brasileiro (R\$)'
-                : _selectedCurrency,
-            trailing: Icon(Icons.chevron_right_rounded,
-                color: colorScheme.onSurface.withOpacity(0.35)),
-            onTap: () => _showCurrencyPicker(colorScheme),
-          ),
-          _SettingsTile(
-            icon: Icons.category_rounded,
-            title: 'Categorias',
-            subtitle: 'Gerenciar categorias de transações',
-            trailing: Icon(Icons.chevron_right_rounded,
-                color: colorScheme.onSurface.withOpacity(0.35)),
-            onTap: () {}, // TODO: navegar para tela de categorias
-          ),
-          const Gap(24),
-
-          // --- Dados ---
-          _SectionHeader(label: 'Dados'),
-          const Gap(10),
-          _SettingsTile(
-            icon: Icons.upload_rounded,
-            title: 'Exportar dados',
-            subtitle: 'Exportar transações em CSV',
-            trailing: Icon(Icons.chevron_right_rounded,
-                color: colorScheme.onSurface.withOpacity(0.35)),
-            onTap: () {}, // TODO: exportar
-          ),
-          _SettingsTile(
-            icon: Icons.delete_forever_rounded,
-            title: 'Apagar todos os dados',
-            subtitle: 'Remove todas as transações e cartões',
-            iconColor: colorScheme.error,
-            titleColor: colorScheme.error,
-            trailing: Icon(Icons.chevron_right_rounded,
-                color: colorScheme.error.withOpacity(0.5)),
-            onTap: _showClearDataConfirm,
-          ),
-          const Gap(24),
-
-          // --- Sobre ---
-          _SectionHeader(label: 'Sobre'),
-          const Gap(10),
-          _SettingsTile(
-            icon: Icons.info_outline_rounded,
-            title: 'Sobre o Nexa',
-            subtitle: 'Versão 1.0.0',
-            trailing: Icon(Icons.chevron_right_rounded,
-                color: colorScheme.onSurface.withOpacity(0.35)),
-            onTap: _showAboutDialog,
-          ),
-        ],
+            const Gap(24),
+            _SectionHeader(label: 'Dados'),
+            const Gap(10),
+            _SettingsTile(
+              icon: Icons.delete_forever_rounded,
+              title: 'Apagar todos os dados',
+              subtitle: 'Remove todas as transações e cartões',
+              iconColor: colorScheme.error,
+              titleColor: colorScheme.error,
+              trailing: Icon(Icons.chevron_right_rounded,
+                  color: colorScheme.error.withOpacity(0.5)),
+              onTap: () => _showClearDataConfirm(context, ref),
+            ),
+            const Gap(24),
+            _SectionHeader(label: 'Sobre'),
+            const Gap(10),
+            _SettingsTile(
+              icon: Icons.info_outline_rounded,
+              title: 'Sobre o Nexa',
+              subtitle: 'Versão 1.0.0',
+              trailing: Icon(Icons.chevron_right_rounded,
+                  color: colorScheme.onSurface.withOpacity(0.35)),
+              onTap: () => _showAboutDialog(context),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -424,14 +368,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ],
             ),
           ),
-          Icon(Icons.edit_outlined,
-              color: colorScheme.onPrimary.withOpacity(0.6), size: 18),
         ],
       ),
     );
   }
 
-  void _showCurrencyPicker(ColorScheme colorScheme) {
+  void _showCurrencyPicker(
+      BuildContext context, ColorScheme colorScheme, WidgetRef ref) {
     final currencies = [
       {'code': 'BRL', 'name': 'Real Brasileiro', 'symbol': 'R\$'},
       {'code': 'USD', 'name': 'Dólar Americano', 'symbol': '\$'},
@@ -490,13 +433,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       style: TextStyle(
                           fontSize: 12,
                           color: colorScheme.onSurface.withOpacity(0.5))),
-                  trailing: _selectedCurrency == c['code']
-                      ? Icon(Icons.check_circle_rounded,
-                          color: colorScheme.primary)
-                      : null,
-                  onTap: () {
-                    setState(() => _selectedCurrency = c['code'] ?? '');
-                    Navigator.pop(ctx);
+                  onTap: () async {
+                    await ref
+                        .read(appSettingsProvider.notifier)
+                        .saveStringSetting('selected_currency', c['code'] ?? 'BRL');
+                    if (context.mounted) Navigator.pop(ctx);
                   },
                 )),
             const Gap(8),
@@ -506,8 +447,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 }
-
-// ---------------------------------------------------------------------------
 
 class _SectionHeader extends StatelessWidget {
   final String label;
