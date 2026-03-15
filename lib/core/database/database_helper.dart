@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:nexa/core/database/default_categories.dart';
 import 'package:nexa/core/models/categories.dart';
 import 'package:nexa/core/models/credit_cards.dart';
 import 'package:nexa/core/models/transactions.dart';
@@ -219,7 +220,10 @@ class DatabaseHelper {
 //#region CreditCards
   Future<List<CreditCards>> getCreditCards() async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query('credit_cards');
+    final List<Map<String, dynamic>> maps = await db.query(
+      'credit_cards',
+      orderBy: 'name COLLATE NOCASE ASC',
+    );
     return List.generate(maps.length, (i) => CreditCards.fromMap(maps[i]));
   }
 
@@ -264,9 +268,30 @@ class DatabaseHelper {
   Future<void> clearAllData() async {
     final db = await database;
     await db.transaction((txn) async {
-      await txn.delete('transactions');
-      await txn.delete('credit_cards');
-      await txn.delete('settings');
+      await txn.execute('PRAGMA foreign_keys = OFF');
+      try {
+        await txn.delete('transactions');
+        await txn.delete('credit_cards');
+        await txn.delete('categories');
+        await txn.delete('settings');
+
+        final batch = txn.batch();
+        for (final category in buildDefaultCategories()) {
+          batch.insert(
+            'categories',
+            category.toMap(),
+            conflictAlgorithm: ConflictAlgorithm.ignore,
+          );
+        }
+        await batch.commit(noResult: true);
+
+        await txn.execute('''
+          DELETE FROM sqlite_sequence
+          WHERE name IN ('transactions', 'credit_cards', 'categories')
+        ''');
+      } finally {
+        await txn.execute('PRAGMA foreign_keys = ON');
+      }
     });
   }
 
