@@ -28,6 +28,7 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
   final _descriptionController = TextEditingController();
   final _noteController = TextEditingController();
   final _installmentController = TextEditingController();
+  final _installmentCurrentController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   String? _selectedType;
   String? _selectedStatus;
@@ -58,6 +59,17 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
     return categories.isNotEmpty ? categories.first.id : null;
   }
 
+  List<int> _splitInstallmentAmount(int totalAmountCents, int installments) {
+    final safeInstallments = installments <= 0 ? 1 : installments;
+    final base = totalAmountCents ~/ safeInstallments;
+    final remainder = totalAmountCents % safeInstallments;
+    return List<int>.generate(
+      safeInstallments,
+      (index) => base + (index < remainder ? 1 : 0),
+      growable: false,
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -77,6 +89,26 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
       _noteController.text = widget.transaction!.note ?? '';
       _installmentController.text =
           widget.transaction!.installmentTotal?.toString() ?? '';
+      _installmentCurrentController.text =
+          widget.transaction!.installmentCurrent?.toString() ?? '1';
+
+      final groupId = widget.transaction!.installmentGroupId;
+      if ((widget.transaction!.installmentTotal ?? 1) > 1 &&
+          groupId != null &&
+          groupId.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          final total =
+              await DatabaseHelper.instance.getInstallmentGroupTotalAmount(groupId);
+          if (!mounted) return;
+          _amountController.text = (total / 100).toStringAsFixed(2);
+        });
+      }
+    } else {
+      final now = DateTime.now();
+      _selectedStatus = 'confirmed';
+      _selectedDateForDb = DateFormat('yyyy-MM-dd').format(now);
+      _dateController.text = DateFormat('dd/MM/yyyy').format(now);
+      _installmentCurrentController.text = '1';
     }
   }
 
@@ -186,11 +218,20 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
       final amount =
           (double.parse(_amountController.text.replaceAll(',', '.')) * 100)
               .toInt();
-      final groupId = const Uuid().v4();
-      final totalParcelas = int.tryParse(_installmentController.text) ?? 1;
-      final baseDate = DateFormat('yyyy-MM-dd').parse(_selectedDateForDb!);
+      final totalParcelas = int.tryParse(_installmentController.text) ??
+          widget.transaction?.installmentTotal ??
+          1;
+      final parcelaAtualInformada = int.tryParse(_installmentCurrentController.text);
+      final installmentCurrent = (parcelaAtualInformada ??
+              widget.transaction?.installmentCurrent ??
+              1)
+          .clamp(1, totalParcelas);
 
-      if (totalParcelas > 1) {
+      final installmentAmounts = _splitInstallmentAmount(amount, totalParcelas);
+
+      if (widget.transaction == null && totalParcelas > 1) {
+        final groupId = const Uuid().v4();
+        final baseDate = DateFormat('yyyy-MM-dd').parse(_selectedDateForDb!);
         for (int i = 0; i < totalParcelas; i++) {
           final parcelaDate = DateTime(
             baseDate.year,
@@ -199,10 +240,9 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
           );
 
           final transaction = Transactions(
-            id: widget.transaction?.id,
-            amountCents: amount,
+            amountCents: installmentAmounts[i],
             type: _selectedType!,
-            status: _selectedStatus ?? 'confirmed', // nullable — sem !
+            status: _selectedStatus ?? 'confirmed',
             description: _descriptionController.text,
             date: DateFormat('yyyy-MM-dd').format(parcelaDate),
             categoryID: resolvedCategoryId,
@@ -214,6 +254,68 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
             createdFromNotification: false,
             note: _noteController.text.isEmpty ? null : _noteController.text,
           );
+          await DatabaseHelper.instance.insertTransaction(transaction);
+        }
+        ref.invalidate(transactionsByMonthProvider);
+        ref.invalidate(transactionsProvider);
+        ref.invalidate(healthScoreProvider);
+        ref.invalidate(balanceProvider);
+        ref.invalidate(cardLimitDetailsProvider);
+        Navigator.pop(context);
+      } else {
+        final shouldUpdateInstallmentGroup =
+            widget.transaction != null &&
+                (widget.transaction!.installmentTotal ?? 1) > 1 &&
+                (widget.transaction!.installmentGroupId?.isNotEmpty ?? false);
+
+        if (shouldUpdateInstallmentGroup) {
+          final installments = await DatabaseHelper.instance
+              .getInstallmentsByGroup(widget.transaction!.installmentGroupId!);
+
+          if (installments.isNotEmpty) {
+            final splitAmounts = _splitInstallmentAmount(amount, installments.length);
+            for (int i = 0; i < installments.length; i++) {
+              final installment = installments[i];
+              final updatedInstallment = Transactions(
+                id: installment.id,
+                amountCents: splitAmounts[i],
+                type: _selectedType!,
+                status: _selectedStatus ?? 'confirmed',
+                description: _descriptionController.text,
+                date: installment.date,
+                categoryID: resolvedCategoryId,
+                creditCardsId: _selectedCardId,
+                installmentTotal: installments.length,
+                installmentCurrent: i + 1,
+                installmentGroupId: widget.transaction!.installmentGroupId,
+                isRecurring: _isRecurring,
+                createdFromNotification: installment.createdFromNotification,
+                note: _noteController.text.isEmpty ? null : _noteController.text,
+                createdAt: installment.createdAt,
+              );
+              await DatabaseHelper.instance.updateTransaction(updatedInstallment);
+            }
+          }
+        } else {
+          final transaction = Transactions(
+            id: widget.transaction?.id,
+            amountCents: totalParcelas > 1 ? installmentAmounts.first : amount,
+            type: _selectedType!,
+            status: _selectedStatus ?? 'confirmed',
+            description: _descriptionController.text,
+            date:
+                _selectedDateForDb ?? widget.transaction?.date ?? _dateController.text,
+            categoryID: resolvedCategoryId,
+            creditCardsId: _selectedCardId,
+            installmentTotal: totalParcelas > 1 ? totalParcelas : null,
+            installmentCurrent: totalParcelas > 1 ? installmentCurrent : null,
+            installmentGroupId:
+                totalParcelas > 1 ? widget.transaction?.installmentGroupId : null,
+            isRecurring: _isRecurring,
+            createdFromNotification: false,
+            note: _noteController.text.isEmpty ? null : _noteController.text,
+          );
+
           if (widget.transaction != null) {
             await DatabaseHelper.instance.updateTransaction(transaction);
           } else {
@@ -222,34 +324,9 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
         }
         ref.invalidate(transactionsByMonthProvider);
         ref.invalidate(transactionsProvider);
-        ref.invalidate(healthScoreProvider);
-        ref.invalidate(balanceProvider);
-        Navigator.pop(context);
-      } else {
-        final transaction = Transactions(
-          id: widget.transaction?.id,
-          amountCents: amount,
-          type: _selectedType!,
-          status: _selectedStatus ?? 'confirmed', // nullable — sem !
-          description: _descriptionController.text,
-          date:
-              _selectedDateForDb ?? _dateController.text, // formato yyyy-MM-dd
-          categoryID: resolvedCategoryId,
-          creditCardsId: _selectedCardId,
-          isRecurring: _isRecurring,
-          createdFromNotification: false,
-          note: _noteController.text.isEmpty ? null : _noteController.text,
-        );
-
-        if (widget.transaction != null) {
-          await DatabaseHelper.instance.updateTransaction(transaction);
-        } else {
-          await DatabaseHelper.instance.insertTransaction(transaction);
-        }
-        ref.invalidate(transactionsByMonthProvider);
-        ref.invalidate(transactionsProvider);
         ref.invalidate(balanceProvider);
         ref.invalidate(healthScoreProvider);
+        ref.invalidate(cardLimitDetailsProvider);
         Navigator.pop(context);
       }
     }
@@ -262,6 +339,7 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
     _descriptionController.dispose();
     _noteController.dispose();
     _installmentController.dispose();
+    _installmentCurrentController.dispose();
     super.dispose();
   }
 
@@ -423,6 +501,7 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
                     decoration: _fieldDecorationCompact('Status'),
                     borderRadius: BorderRadius.circular(AppTheme.radiusChip),
                     isExpanded: true,
+                    value: _selectedStatus,
                     validator: null,
                     onChanged: (value) =>
                         setState(() => _selectedStatus = value),
@@ -453,9 +532,12 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
                     validator: (value) =>
                         (value == null || value.isEmpty) ? 'Informe' : null,
                     onTap: () async {
+                      final initialDate = _selectedDateForDb != null
+                          ? DateFormat('yyyy-MM-dd').parse(_selectedDateForDb!)
+                          : DateTime.now();
                       final picked = await showDatePicker(
                         context: context,
-                        initialDate: DateTime.now(),
+                        initialDate: initialDate,
                         firstDate: DateTime(2020),
                         lastDate: DateTime(2030),
                       );
@@ -498,6 +580,7 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
                   child: TextFormField(
                     keyboardType: TextInputType.number,
                     decoration: _fieldDecorationCompact('Parcela atual'),
+                    controller: _installmentCurrentController,
                   ),
                 ),
               ],

@@ -6,6 +6,7 @@ import 'package:nexa/core/database/database_helper.dart';
 import 'package:nexa/core/models/transactions.dart';
 import 'package:nexa/core/theme/app_theme.dart';
 import 'package:nexa/core/utils/currency_formatter.dart';
+import 'package:nexa/features/cards/providers/cards_provider.dart';
 import 'package:nexa/features/cards/screens/card_screen.dart';
 import 'package:nexa/features/home/provider/balance_provider.dart';
 import 'package:nexa/features/home/provider/health_score_provider.dart';
@@ -488,6 +489,7 @@ class _TransactionsPageState extends ConsumerState<_TransactionsPage> {
                 ref.invalidate(transactionsProvider);
                 ref.invalidate(healthScoreProvider);
                 ref.invalidate(balanceProvider);
+                ref.invalidate(cardLimitDetailsProvider);
               },
             ),
             childCount: filtered.length,
