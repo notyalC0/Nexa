@@ -609,7 +609,7 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
               data: (cards) => DropdownButtonFormField<int>(
                 decoration:
                     _fieldDecoration('Cartão', icon: Icons.credit_card_rounded),
-                value: _selectedCardId,
+                initialValue: _selectedCardId,
                 onChanged: (value) => setState(() => _selectedCardId = value),
                 hint: const Text('Nenhum cartão'),
                 items: cards
@@ -644,9 +644,9 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
                 return DropdownButtonFormField<int>(
                   decoration:
                       _fieldDecoration('Categoria', icon: Icons.category_rounded),
-                  value: dropdownValue,
+                  initialValue: dropdownValue,
                   onChanged: (value) => setState(() => _selectedCategoryId = value),
-                  hint: const Text('Selecione uma categoria (opcional)'),
+                  hint: const Text('Categoria'),
                   validator: (_) => null,
                   items: categories
                       .map((category) => DropdownMenuItem(
