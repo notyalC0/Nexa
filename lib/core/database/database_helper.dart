@@ -166,6 +166,7 @@ class DatabaseHelper {
 
 //#region Transactions
   Future<List<Transactions>> getTransactionsByMonth(String month) async {
+    await _ensureRecurringTransactionsForMonth(month);
     final db = await database;
     final maps = await db.query(
       'transactions',
@@ -178,6 +179,100 @@ class DatabaseHelper {
       debugPrint('Encontrou: ${maps.length} transações');
     }
     return List.generate(maps.length, (i) => Transactions.fromMap(maps[i]));
+  }
+
+  Future<void> _ensureRecurringTransactionsForMonth(String month) async {
+    final db = await database;
+    final targetMonth = DateTime.parse('$month-01');
+    final nextMonth = DateTime(targetMonth.year, targetMonth.month + 1, 1);
+    final targetMonthKey = _formatMonth(targetMonth);
+
+    final recurringMaps = await db.query(
+      'transactions',
+      where: 'is_recurring = 1 AND date < ?',
+      whereArgs: [_formatDate(nextMonth)],
+      orderBy: 'date ASC, id ASC',
+    );
+
+    if (recurringMaps.isEmpty) return;
+
+    final existingRecurringInMonth = await db.query(
+      'transactions',
+      columns: [
+        'amount_cents',
+        'type',
+        'status',
+        'description',
+        'date',
+        'category_id',
+        'credit_cards_id',
+        'installment_total',
+        'installment_current',
+        'installment_group_id',
+        'is_recurring',
+        'note',
+      ],
+      where: 'is_recurring = 1 AND date LIKE ?',
+      whereArgs: ['$targetMonthKey%'],
+    );
+
+    final existingKeys = existingRecurringInMonth
+        .map((row) => _buildRecurringKey(row, row['date'] as String))
+        .toSet();
+
+    for (final map in recurringMaps) {
+      final recurring = Transactions.fromMap(map);
+      final baseDate = DateTime.parse(recurring.date);
+
+      DateTime candidateDate =
+          DateTime(baseDate.year, baseDate.month + 1, baseDate.day);
+
+      while (candidateDate.isBefore(nextMonth)) {
+        if (_formatMonth(candidateDate) == targetMonthKey) {
+          final candidateDateStr = _formatDate(candidateDate);
+          final key = _buildRecurringKey(map, candidateDateStr);
+
+          if (!existingKeys.contains(key)) {
+            await db.insert('transactions', {
+              ...recurring.toMap(),
+              'date': candidateDateStr,
+            });
+            existingKeys.add(key);
+          }
+        }
+
+        candidateDate =
+            DateTime(candidateDate.year, candidateDate.month + 1, candidateDate.day);
+      }
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '${date.year}-$month-$day';
+  }
+
+  String _formatMonth(DateTime date) {
+    final month = date.month.toString().padLeft(2, '0');
+    return '${date.year}-$month';
+  }
+
+  String _buildRecurringKey(Map<String, dynamic> transactionMap, String date) {
+    return [
+      transactionMap['amount_cents'],
+      transactionMap['type'],
+      transactionMap['status'],
+      transactionMap['description'] ?? '',
+      date,
+      transactionMap['category_id'],
+      transactionMap['credit_cards_id'] ?? '',
+      transactionMap['installment_total'] ?? '',
+      transactionMap['installment_current'] ?? '',
+      transactionMap['installment_group_id'] ?? '',
+      transactionMap['is_recurring'] ?? 0,
+      transactionMap['note'] ?? '',
+    ].join('|');
   }
 
   Future<int> insertTransaction(Transactions transaction) async {
