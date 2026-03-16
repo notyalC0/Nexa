@@ -265,6 +265,40 @@ class DatabaseHelper {
     return result.first['total'] as int? ?? 0;
   }
 
+  Future<int> getCardUsedLimit(int cardId) async {
+    final db = await database;
+    final result = await db.rawQuery('''
+    SELECT SUM(amount_cents) as total FROM transactions
+    WHERE type = 'expense'
+    AND credit_cards_id = ?
+    AND status IN ('confirmed', 'pending')
+  ''', [cardId]);
+
+    return result.first['total'] as int? ?? 0;
+  }
+
+  Future<int> getInstallmentGroupTotalAmount(String groupId) async {
+    final db = await database;
+    final result = await db.rawQuery('''
+    SELECT SUM(amount_cents) as total FROM transactions
+    WHERE installment_group_id = ?
+  ''', [groupId]);
+
+    return result.first['total'] as int? ?? 0;
+  }
+
+  Future<List<Transactions>> getInstallmentsByGroup(String groupId) async {
+    final db = await database;
+    final maps = await db.query(
+      'transactions',
+      where: 'installment_group_id = ?',
+      whereArgs: [groupId],
+      orderBy: 'installment_current ASC, date ASC, id ASC',
+    );
+
+    return List.generate(maps.length, (i) => Transactions.fromMap(maps[i]));
+  }
+
   Future<void> clearAllData() async {
     final db = await database;
     await db.transaction((txn) async {

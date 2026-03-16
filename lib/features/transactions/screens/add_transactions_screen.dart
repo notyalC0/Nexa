@@ -59,6 +59,17 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
     return categories.isNotEmpty ? categories.first.id : null;
   }
 
+  List<int> _splitInstallmentAmount(int totalAmountCents, int installments) {
+    final safeInstallments = installments <= 0 ? 1 : installments;
+    final base = totalAmountCents ~/ safeInstallments;
+    final remainder = totalAmountCents % safeInstallments;
+    return List<int>.generate(
+      safeInstallments,
+      (index) => base + (index < remainder ? 1 : 0),
+      growable: false,
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -80,6 +91,18 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
           widget.transaction!.installmentTotal?.toString() ?? '';
       _installmentCurrentController.text =
           widget.transaction!.installmentCurrent?.toString() ?? '1';
+
+      final groupId = widget.transaction!.installmentGroupId;
+      if ((widget.transaction!.installmentTotal ?? 1) > 1 &&
+          groupId != null &&
+          groupId.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          final total =
+              await DatabaseHelper.instance.getInstallmentGroupTotalAmount(groupId);
+          if (!mounted) return;
+          _amountController.text = (total / 100).toStringAsFixed(2);
+        });
+      }
     } else {
       final now = DateTime.now();
       _selectedStatus = 'confirmed';
@@ -204,6 +227,8 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
               1)
           .clamp(1, totalParcelas);
 
+      final installmentAmounts = _splitInstallmentAmount(amount, totalParcelas);
+
       if (widget.transaction == null && totalParcelas > 1) {
         final groupId = const Uuid().v4();
         final baseDate = DateFormat('yyyy-MM-dd').parse(_selectedDateForDb!);
@@ -215,7 +240,7 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
           );
 
           final transaction = Transactions(
-            amountCents: amount,
+            amountCents: installmentAmounts[i],
             type: _selectedType!,
             status: _selectedStatus ?? 'confirmed',
             description: _descriptionController.text,
@@ -238,28 +263,64 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
         ref.invalidate(cardLimitDetailsProvider);
         Navigator.pop(context);
       } else {
-        final transaction = Transactions(
-          id: widget.transaction?.id,
-          amountCents: amount,
-          type: _selectedType!,
-          status: _selectedStatus ?? 'confirmed',
-          description: _descriptionController.text,
-          date: _selectedDateForDb ?? widget.transaction?.date ?? _dateController.text,
-          categoryID: resolvedCategoryId,
-          creditCardsId: _selectedCardId,
-          installmentTotal: totalParcelas > 1 ? totalParcelas : null,
-          installmentCurrent: totalParcelas > 1 ? installmentCurrent : null,
-          installmentGroupId:
-              totalParcelas > 1 ? widget.transaction?.installmentGroupId : null,
-          isRecurring: _isRecurring,
-          createdFromNotification: false,
-          note: _noteController.text.isEmpty ? null : _noteController.text,
-        );
+        final shouldUpdateInstallmentGroup =
+            widget.transaction != null &&
+                (widget.transaction!.installmentTotal ?? 1) > 1 &&
+                (widget.transaction!.installmentGroupId?.isNotEmpty ?? false);
 
-        if (widget.transaction != null) {
-          await DatabaseHelper.instance.updateTransaction(transaction);
+        if (shouldUpdateInstallmentGroup) {
+          final installments = await DatabaseHelper.instance
+              .getInstallmentsByGroup(widget.transaction!.installmentGroupId!);
+
+          if (installments.isNotEmpty) {
+            final splitAmounts = _splitInstallmentAmount(amount, installments.length);
+            for (int i = 0; i < installments.length; i++) {
+              final installment = installments[i];
+              final updatedInstallment = Transactions(
+                id: installment.id,
+                amountCents: splitAmounts[i],
+                type: _selectedType!,
+                status: _selectedStatus ?? 'confirmed',
+                description: _descriptionController.text,
+                date: installment.date,
+                categoryID: resolvedCategoryId,
+                creditCardsId: _selectedCardId,
+                installmentTotal: installments.length,
+                installmentCurrent: i + 1,
+                installmentGroupId: widget.transaction!.installmentGroupId,
+                isRecurring: _isRecurring,
+                createdFromNotification: installment.createdFromNotification,
+                note: _noteController.text.isEmpty ? null : _noteController.text,
+                createdAt: installment.createdAt,
+              );
+              await DatabaseHelper.instance.updateTransaction(updatedInstallment);
+            }
+          }
         } else {
-          await DatabaseHelper.instance.insertTransaction(transaction);
+          final transaction = Transactions(
+            id: widget.transaction?.id,
+            amountCents: totalParcelas > 1 ? installmentAmounts.first : amount,
+            type: _selectedType!,
+            status: _selectedStatus ?? 'confirmed',
+            description: _descriptionController.text,
+            date:
+                _selectedDateForDb ?? widget.transaction?.date ?? _dateController.text,
+            categoryID: resolvedCategoryId,
+            creditCardsId: _selectedCardId,
+            installmentTotal: totalParcelas > 1 ? totalParcelas : null,
+            installmentCurrent: totalParcelas > 1 ? installmentCurrent : null,
+            installmentGroupId:
+                totalParcelas > 1 ? widget.transaction?.installmentGroupId : null,
+            isRecurring: _isRecurring,
+            createdFromNotification: false,
+            note: _noteController.text.isEmpty ? null : _noteController.text,
+          );
+
+          if (widget.transaction != null) {
+            await DatabaseHelper.instance.updateTransaction(transaction);
+          } else {
+            await DatabaseHelper.instance.insertTransaction(transaction);
+          }
         }
         ref.invalidate(transactionsByMonthProvider);
         ref.invalidate(transactionsProvider);
