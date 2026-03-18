@@ -513,7 +513,7 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
                     decoration: _fieldDecorationCompact('Status'),
                     borderRadius: BorderRadius.circular(AppTheme.radiusChip),
                     isExpanded: true,
-                    value: _selectedStatus,
+                    initialValue: _selectedStatus,
                     validator: null,
                     onChanged: (value) =>
                         setState(() => _selectedStatus = value),

@@ -787,8 +787,8 @@ class _FilterBar extends StatelessWidget {
                       children: [
                         Text(monthLabel,
                             style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
                                 color: cs.onSurface,
                                 letterSpacing: -0.2)),
                         if (isFutureMonth) ...[
@@ -804,7 +804,7 @@ class _FilterBar extends StatelessWidget {
                             ),
                             child: Text('Projetado',
                                 style: TextStyle(
-                                    fontSize: 10,
+                                    fontSize: 11,
                                     fontWeight: FontWeight.w700,
                                     color: Colors.amber.shade700)),
                           ),
@@ -819,7 +819,7 @@ class _FilterBar extends StatelessWidget {
             ),
           ),
           SizedBox(
-            height: 36,
+            height: 45,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(
@@ -850,14 +850,14 @@ class _FilterBar extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(f.icon,
-                            size: 13,
+                            size: 20,
                             color: isActive
                                 ? cs.onPrimary
                                 : cs.onSurface.withOpacity(0.6)),
                         const Gap(5),
                         Text(f.label,
                             style: TextStyle(
-                                fontSize: 12,
+                                fontSize: 11,
                                 fontWeight: isActive
                                     ? FontWeight.w700
                                     : FontWeight.w500,
@@ -899,7 +899,7 @@ class _MonthArrow extends StatelessWidget {
           color: cs.surfaceVariant.withOpacity(0.5),
           borderRadius: BorderRadius.circular(AppTheme.radiusChip),
         ),
-        child: Icon(icon, size: 22, color: cs.onSurface.withOpacity(0.7)),
+        child: Icon(icon, size: 40, color: cs.onSurface.withOpacity(0.7)),
       ),
     );
   }
@@ -907,7 +907,7 @@ class _MonthArrow extends StatelessWidget {
 
 class _StickyFilterDelegate extends SliverPersistentHeaderDelegate {
   final Widget child;
-  static const double _height = 87;
+  static const double _height = 120;
   const _StickyFilterDelegate({required this.child});
 
   @override
