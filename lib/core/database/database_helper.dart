@@ -23,7 +23,7 @@ class DatabaseHelper {
     final path = join(await getDatabasesPath(), 'nexa.db');
     return openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _createTables,
       onUpgrade: _onUpgrade,
     );
@@ -33,6 +33,38 @@ class DatabaseHelper {
     if (oldVersion < 2) {
       await _removeDuplicateCategoriesFromDb(db);
       await _createIndexes(db);
+    }
+
+    if (oldVersion < 3) {
+      await db.execute(
+        'ALTER TABLE transactions ADD COLUMN recurring_id TEXT',
+      );
+      await db.execute(
+        'ALTER TABLE transactions ADD COLUMN parent_id INTEGER',
+      );
+      await db.execute('''
+        CREATE INDEX IF NOT EXISTS idx_transactions_recurring_group
+        ON transactions(recurring_id, parent_id, date)
+      ''');
+
+      final recurringMaps = await db.query(
+        'transactions',
+        columns: ['id'],
+        where: 'is_recurring = 1',
+      );
+      for (final row in recurringMaps) {
+        final id = row['id'] as int?;
+        if (id == null) continue;
+        await db.update(
+          'transactions',
+          {
+            'recurring_id': 'legacy-$id',
+            'parent_id': id,
+          },
+          where: 'id = ? AND recurring_id IS NULL',
+          whereArgs: [id],
+        );
+      }
     }
   }
 
@@ -72,6 +104,8 @@ class DatabaseHelper {
         installment_current INTEGER,
         installment_group_id TEXT,
         is_recurring INTEGER,
+        recurring_id TEXT,
+        parent_id INTEGER,
         note TEXT,
         created_from_notification INTEGER,
         created_at TEXT,
@@ -109,6 +143,11 @@ class DatabaseHelper {
     await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_transactions_card_date
       ON transactions(credit_cards_id, date)
+    ''');
+
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_transactions_recurring_group
+      ON transactions(recurring_id, parent_id, date)
     ''');
   }
 
@@ -210,6 +249,8 @@ class DatabaseHelper {
         'installment_current',
         'installment_group_id',
         'is_recurring',
+        'recurring_id',
+        'parent_id',
         'note',
       ],
       where: 'is_recurring = 1 AND date LIKE ?',
@@ -223,6 +264,8 @@ class DatabaseHelper {
     for (final map in recurringMaps) {
       final recurring = Transactions.fromMap(map);
       final baseDate = DateTime.parse(recurring.date);
+      final rootParentId = recurring.parentId ?? recurring.id;
+      final recurringId = recurring.recurringId ?? 'legacy-${rootParentId ?? recurring.id ?? 0}';
 
       DateTime candidateDate =
           DateTime(baseDate.year, baseDate.month + 1, baseDate.day);
@@ -230,12 +273,14 @@ class DatabaseHelper {
       while (candidateDate.isBefore(nextMonth)) {
         if (_formatMonth(candidateDate) == targetMonthKey) {
           final candidateDateStr = _formatDate(candidateDate);
-          final key = _buildRecurringKey(map, candidateDateStr);
+          final key = _buildRecurringKey({...map, 'recurring_id': recurringId, 'parent_id': rootParentId}, candidateDateStr);
 
           if (!existingKeys.contains(key)) {
             await db.insert('transactions', {
               ...recurring.toMap(),
               'date': candidateDateStr,
+              'recurring_id': recurringId,
+              'parent_id': rootParentId,
             });
             existingKeys.add(key);
           }
@@ -271,6 +316,8 @@ class DatabaseHelper {
       transactionMap['installment_current'] ?? '',
       transactionMap['installment_group_id'] ?? '',
       transactionMap['is_recurring'] ?? 0,
+      transactionMap['recurring_id'] ?? '',
+      transactionMap['parent_id'] ?? '',
       transactionMap['note'] ?? '',
     ].join('|');
   }
@@ -293,12 +340,53 @@ class DatabaseHelper {
     );
   }
 
-  Future<int> deleteTransaction(int id) async {
+  Future<int> deleteTransaction(int id, {bool deleteAll = false}) async {
     final db = await database;
-    return db.delete(
+    if (!deleteAll) {
+      return db.delete(
+        'transactions',
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    }
+
+    final maps = await db.query(
       'transactions',
       where: 'id = ?',
       whereArgs: [id],
+      limit: 1,
+    );
+    if (maps.isEmpty) return 0;
+
+    final transaction = Transactions.fromMap(maps.first);
+    if (!transaction.isRecurring) {
+      return db.delete('transactions', where: 'id = ?', whereArgs: [id]);
+    }
+
+    final rootParentId = transaction.parentId ?? transaction.id;
+    final recurringId = transaction.recurringId;
+    final clauses = <String>[];
+    final args = <Object?>[];
+
+    if (recurringId != null && recurringId.isNotEmpty) {
+      clauses.add('recurring_id = ?');
+      args.add(recurringId);
+    }
+    if (rootParentId != null) {
+      clauses.add('parent_id = ?');
+      args.add(rootParentId);
+      clauses.add('id = ?');
+      args.add(rootParentId);
+    }
+
+    if (clauses.isEmpty) {
+      return db.delete('transactions', where: 'id = ?', whereArgs: [id]);
+    }
+
+    return db.delete(
+      'transactions',
+      where: '(${clauses.join(' OR ')}) AND date >= ?',
+      whereArgs: [...args, transaction.date],
     );
   }
 
@@ -477,10 +565,43 @@ class DatabaseHelper {
     return result.first['total'] as int? ?? 0;
   }
 
-  Future<int> getBalanceForMonth(String month) async {
+  Future<int> getBalanceForMonth(String month, {bool includeCarryOver = true}) async {
     final income = await getTotalIncomeForMonth(month);
     final expense = await getTotalExpensesForMonth(month);
-    return income - expense;
+    final carryOver = includeCarryOver ? await getCarryOverForMonth(month) : 0;
+    return carryOver + income - expense;
+  }
+
+  Future<int> getCarryOverForMonth(String month) async {
+    final target = DateTime.parse('$month-01');
+    var runningCarryOver = 0;
+    var cursor = await getFirstTransactionMonth();
+
+    while (cursor != null && cursor.isBefore(target)) {
+      final currentMonth = _formatMonth(cursor);
+      final income = await getTotalIncomeForMonth(currentMonth);
+      final expense = await getTotalExpensesForMonth(currentMonth);
+      final finalBalance = runningCarryOver + income - expense;
+      runningCarryOver = finalBalance > 0 ? finalBalance : 0;
+      cursor = DateTime(cursor.year, cursor.month + 1, 1);
+    }
+
+    return runningCarryOver;
+  }
+
+  Future<DateTime?> getFirstTransactionMonth() async {
+    final db = await database;
+    final result = await db.rawQuery('''
+      SELECT date
+      FROM transactions
+      ORDER BY date ASC, id ASC
+      LIMIT 1
+    ''');
+    if (result.isEmpty) return null;
+    final rawDate = result.first['date'] as String?;
+    if (rawDate == null || rawDate.isEmpty) return null;
+    final date = DateTime.parse(rawDate);
+    return DateTime(date.year, date.month, 1);
   }
 
   Future<int> getProjectedBalanceForMonth(String month) async {

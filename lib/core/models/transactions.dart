@@ -11,6 +11,8 @@ class Transactions {
   final int? installmentCurrent;
   final String? installmentGroupId;
   final bool isRecurring;
+  final String? recurringId;
+  final int? parentId;
   final String? note;
   final bool createdFromNotification;
   final String? createdAt;
@@ -28,6 +30,8 @@ class Transactions {
       this.installmentCurrent,
       this.installmentGroupId,
       required this.isRecurring,
+      this.recurringId,
+      this.parentId,
       this.note,
       required this.createdFromNotification,
       this.createdAt});
@@ -46,6 +50,8 @@ class Transactions {
         installmentCurrent: map['installment_current'],
         installmentGroupId: map['installment_group_id'],
         isRecurring: map['is_recurring'] == 1,
+        recurringId: map['recurring_id'],
+        parentId: map['parent_id'],
         note: map['note'],
         createdFromNotification: map['created_from_notification'] == 1,
         createdAt: map['created_at']);
@@ -64,6 +70,8 @@ class Transactions {
       'installment_current': installmentCurrent,
       'installment_group_id': installmentGroupId,
       'is_recurring': isRecurring ? 1 : 0,
+      'recurring_id': recurringId,
+      'parent_id': parentId,
       'note': note,
       'created_from_notification': createdFromNotification ? 1 : 0,
       'created_at': createdAt

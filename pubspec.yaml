@@ -46,6 +46,7 @@
     flutter_launcher_icons: ^0.13.1
     flutter_native_splash: ^2.3.13
     uuid: ^4.0.0
+    mask_text_input_formatter: ^2.9.0
 
   flutter_native_splash:
     color: "#1A1A1A" # Mesma cor de fundo do seu ícone

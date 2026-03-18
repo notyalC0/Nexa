@@ -223,6 +223,92 @@ class _TransactionsPageState extends ConsumerState<_TransactionsPage> {
       BuildContext context, Transactions transaction) async {
     final cs = Theme.of(context).colorScheme;
 
+    if (transaction.isRecurring) {
+      final option = await showDialog<String>(
+        context: context,
+        barrierColor: Colors.black54,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTheme.radiusModal),
+          ),
+          backgroundColor: cs.surface,
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: cs.error.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusChip),
+                ),
+                child: Icon(Icons.repeat_rounded, color: cs.error, size: 20),
+              ),
+              const Gap(12),
+              Expanded(
+                child: Text('Transação recorrente',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: cs.onSurface)),
+              ),
+            ],
+          ),
+          content: Text(
+            'Deseja deletar apenas esta ou todas as parcelas futuras?',
+            style: TextStyle(
+                fontSize: 14,
+                color: cs.onSurface.withOpacity(0.7),
+                height: 1.4),
+          ),
+          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          actions: [
+            SizedBox(
+              width: double.infinity,
+              child: TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancelar'),
+              ),
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(ctx, 'current'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: cs.error,
+                      side: BorderSide(color: cs.error.withOpacity(0.5)),
+                    ),
+                    child: const Text('Só esta'),
+                  ),
+                ),
+                const Gap(10),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(ctx, 'future'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: cs.error,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: const Text('Futuras'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+
+      if (option == 'current') {
+        await DatabaseHelper.instance.deleteTransaction(transaction.id!);
+        return true;
+      }
+      if (option == 'future') {
+        await DatabaseHelper.instance
+            .deleteTransaction(transaction.id!, deleteAll: true);
+        return true;
+      }
+      return false;
+    }
+
     final canDeleteGroup = transaction.creditCardsId != null &&
         (transaction.installmentTotal ?? 1) > 1 &&
         (transaction.installmentGroupId?.isNotEmpty ?? false);
@@ -375,21 +461,24 @@ class _TransactionsPageState extends ConsumerState<_TransactionsPage> {
                 incomeCents: 0,
                 expensesCents: 0,
                 isLoading: true,
-                hideBalance: hideBalance),
+                hideBalance: hideBalance,
+                initialBalanceCents: 0),
             error: (_, __) => _buildHeader(context,
                 availableCents: 0,
                 projectedCents: 0,
                 incomeCents: 0,
                 expensesCents: 0,
                 isLoading: false,
-                hideBalance: hideBalance),
+                hideBalance: hideBalance,
+                initialBalanceCents: 0),
             data: (b) => _buildHeader(context,
                 availableCents: b.availableCents,
                 projectedCents: b.projectCents,
                 incomeCents: b.incomeCents,
                 expensesCents: b.expensesCents,
                 isLoading: false,
-                hideBalance: hideBalance),
+                hideBalance: hideBalance,
+                initialBalanceCents: b.initialBalanceCents),
           ),
           const SliverToBoxAdapter(child: Gap(8)),
 
@@ -434,6 +523,7 @@ class _TransactionsPageState extends ConsumerState<_TransactionsPage> {
     required int expensesCents,
     required bool isLoading,
     required bool hideBalance,
+    required int initialBalanceCents,
   }) {
     final cs = Theme.of(context).colorScheme;
 
@@ -476,16 +566,51 @@ class _TransactionsPageState extends ConsumerState<_TransactionsPage> {
               if (isLoading)
                 _Shimmer(width: 160, height: 36, color: cs.onPrimary)
               else
-                Text(
-                  hideBalance
-                      ? '••••••'
-                      : CurrencyFormatter.format(availableCents),
-                  style: TextStyle(
-                      color: cs.onPrimary,
-                      fontSize: 32,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -1,
-                      height: 1),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        hideBalance
+                            ? '••••••'
+                            : CurrencyFormatter.format(availableCents),
+                        style: TextStyle(
+                            color: cs.onPrimary,
+                            fontSize: 32,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -1,
+                            height: 1),
+                      ),
+                    ),
+                    const Gap(8),
+                    IconButton(
+                      onPressed: () => ref
+                          .read(appSettingsProvider.notifier)
+                          .saveBoolSetting('hide_balance', !hideBalance),
+                      icon: Icon(
+                        hideBalance
+                            ? Icons.visibility_off_rounded
+                            : Icons.visibility_rounded,
+                        color: cs.onPrimary,
+                      ),
+                      tooltip:
+                          hideBalance ? 'Mostrar saldo' : 'Ocultar saldo',
+                    ),
+                  ],
+                ),
+              if (!isLoading && initialBalanceCents > 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    hideBalance
+                        ? 'Saldo anterior: ••••••'
+                        : 'Saldo anterior: ${CurrencyFormatter.format(initialBalanceCents)}',
+                    style: TextStyle(
+                      color: cs.onPrimary.withOpacity(0.72),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                 ),
 
               const Gap(12),
