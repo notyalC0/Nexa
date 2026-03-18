@@ -4,6 +4,7 @@ import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
 import 'package:nexa/core/database/database_helper.dart';
 import 'package:nexa/core/theme/app_theme.dart';
+import 'package:nexa/core/utils/input_masks.dart';
 import 'package:nexa/features/cards/providers/cards_provider.dart';
 import 'package:nexa/features/home/provider/balance_provider.dart';
 import 'package:nexa/features/home/provider/health_score_provider.dart';
@@ -36,6 +37,7 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
   int? _selectedCardId;
   int? _selectedCategoryId;
   bool _triedToSave = false;
+  late final _currencyMask = InputMasks.currency();
 
   final _types = [
     _TransactionType(
@@ -74,8 +76,8 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
   void initState() {
     super.initState();
     if (widget.transaction != null) {
-      _amountController.text = (widget.transaction!.amountCents / 100)
-          .toStringAsFixed(2); // converte centavos para reais
+      _amountController.text =
+          InputMasks.centsToCurrencyText(widget.transaction!.amountCents);
       _selectedType = widget.transaction!.type;
       _selectedStatus = widget.transaction!.status;
       _selectedCardId = widget.transaction!.creditCardsId;
@@ -100,7 +102,7 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
           final total =
               await DatabaseHelper.instance.getInstallmentGroupTotalAmount(groupId);
           if (!mounted) return;
-          _amountController.text = (total / 100).toStringAsFixed(2);
+          _amountController.text = InputMasks.centsToCurrencyText(total);
         });
       }
     } else {
@@ -215,9 +217,12 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
 
       _selectedCategoryId = resolvedCategoryId;
 
-      final amount =
-          (double.parse(_amountController.text.replaceAll(',', '.')) * 100)
-              .toInt();
+      final amount = InputMasks.currencyToCents(_amountController.text);
+      final recurringId = _isRecurring
+          ? (widget.transaction?.recurringId ?? const Uuid().v4())
+          : null;
+      final recurringParentId =
+          _isRecurring ? (widget.transaction?.parentId ?? widget.transaction?.id) : null;
       final totalParcelas = int.tryParse(_installmentController.text) ??
           widget.transaction?.installmentTotal ??
           1;
@@ -251,6 +256,8 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
             installmentCurrent: i + 1,
             installmentGroupId: groupId,
             isRecurring: _isRecurring,
+            recurringId: recurringId,
+            parentId: recurringParentId,
             createdFromNotification: false,
             note: _noteController.text.isEmpty ? null : _noteController.text,
           );
@@ -289,6 +296,8 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
                 installmentCurrent: i + 1,
                 installmentGroupId: widget.transaction!.installmentGroupId,
                 isRecurring: _isRecurring,
+                recurringId: recurringId,
+                parentId: installment.parentId ?? recurringParentId,
                 createdFromNotification: installment.createdFromNotification,
                 note: _noteController.text.isEmpty ? null : _noteController.text,
                 createdAt: installment.createdAt,
@@ -312,6 +321,8 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
             installmentGroupId:
                 totalParcelas > 1 ? widget.transaction?.installmentGroupId : null,
             isRecurring: _isRecurring,
+            recurringId: recurringId,
+            parentId: recurringParentId,
             createdFromNotification: false,
             note: _noteController.text.isEmpty ? null : _noteController.text,
           );
@@ -410,9 +421,10 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
               ),
+              inputFormatters: [_currencyMask],
               validator: (value) {
                 if (value == null || value.isEmpty) return 'Informe um valor';
-                if (double.tryParse(value.replaceAll(',', '.')) == null) {
+                if (InputMasks.currencyToCents(value) <= 0) {
                   return 'Valor inválido';
                 }
                 return null;

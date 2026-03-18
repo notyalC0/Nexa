@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import 'package:nexa/core/database/database_helper.dart';
 import 'package:nexa/core/models/credit_cards.dart';
 import 'package:nexa/core/theme/app_theme.dart';
 import 'package:nexa/core/utils/currency_formatter.dart';
+import 'package:nexa/core/utils/input_masks.dart';
 import 'package:nexa/features/cards/providers/cards_provider.dart';
 
 class CardsScreen extends ConsumerStatefulWidget {
@@ -55,6 +57,7 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
     final bankController = TextEditingController();
     final closingController = TextEditingController();
     final dueController = TextEditingController();
+    final limitMask = InputMasks.currency();
     String? pickedHex;
 
     showModalBottomSheet(
@@ -103,7 +106,8 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
                   controller: limitController,
                   label: 'Limite (R\$)',
                   icon: Icons.attach_money_rounded,
-                  keyboardType: TextInputType.number),
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [limitMask]),
               const Gap(12),
               Row(
                 children: [
@@ -138,12 +142,10 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
                             BorderRadius.circular(AppTheme.radiusChip)),
                   ),
                   onPressed: () async {
-                    final limitValue = double.tryParse(
-                            limitController.text.replaceAll(',', '.')) ??
-                        0;
+                    final limitValue = InputMasks.currencyToCents(limitController.text);
                     final newCard = CreditCards(
                       name: nameController.text,
-                      totalLimitCents: (limitValue * 100).toInt(),
+                      totalLimitCents: limitValue,
                       closingDay: int.tryParse(closingController.text) ?? 1,
                       dueDay: int.tryParse(dueController.text) ?? 10,
                       colorHex: pickedHex,
@@ -169,11 +171,12 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final nameController = TextEditingController(text: card.name);
     final limitController = TextEditingController(
-        text: (card.totalLimitCents / 100).toStringAsFixed(2));
+        text: InputMasks.centsToCurrencyText(card.totalLimitCents));
     final bankController = TextEditingController(text: card.bankKeyword);
     final closingController =
         TextEditingController(text: card.closingDay.toString());
     final dueController = TextEditingController(text: card.dueDay.toString());
+    final limitMask = InputMasks.currency();
 
     showModalBottomSheet(
       context: context,
@@ -221,7 +224,8 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
                   controller: limitController,
                   label: 'Limite (R\$)',
                   icon: Icons.attach_money_rounded,
-                  keyboardType: TextInputType.number),
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [limitMask]),
               const Gap(12),
               Row(
                 children: [
@@ -256,16 +260,14 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
                             BorderRadius.circular(AppTheme.radiusChip)),
                   ),
                   onPressed: () async {
-                    final limitValue = double.tryParse(
-                            limitController.text.replaceAll(',', '.')) ??
-                        0;
+                    final limitValue = InputMasks.currencyToCents(limitController.text);
                     final updated = CreditCards(
                       id: card.id,
                       name: nameController.text.isNotEmpty
                           ? nameController.text
                           : card.name,
                       totalLimitCents: limitValue > 0
-                          ? (limitValue * 100).toInt()
+                          ? limitValue
                           : card.totalLimitCents,
                       closingDay: int.tryParse(closingController.text) ??
                           card.closingDay,
@@ -810,12 +812,14 @@ class _SheetField extends StatelessWidget {
   final String label;
   final IconData icon;
   final TextInputType keyboardType;
+  final List<TextInputFormatter>? inputFormatters;
 
   const _SheetField({
     required this.controller,
     required this.label,
     required this.icon,
     this.keyboardType = TextInputType.text,
+    this.inputFormatters,
   });
 
   @override
@@ -824,6 +828,7 @@ class _SheetField extends StatelessWidget {
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
+      inputFormatters: inputFormatters,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon:

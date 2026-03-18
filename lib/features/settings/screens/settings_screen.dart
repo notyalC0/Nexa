@@ -5,6 +5,7 @@ import 'package:nexa/core/database/database_helper.dart';
 import 'package:nexa/core/models/categories.dart';
 import 'package:nexa/core/theme/app_theme.dart';
 import 'package:nexa/core/utils/currency_formatter.dart';
+import 'package:nexa/core/utils/input_masks.dart';
 import 'package:nexa/features/cards/providers/cards_provider.dart';
 import 'package:nexa/features/home/provider/balance_provider.dart';
 import 'package:nexa/features/home/provider/health_score_provider.dart';
@@ -74,6 +75,7 @@ class SettingsScreen extends ConsumerWidget {
     String title,
   ) {
     final controller = TextEditingController();
+    final currencyMask = InputMasks.currency();
 
     showModalBottomSheet(
       context: context,
@@ -94,6 +96,7 @@ class SettingsScreen extends ConsumerWidget {
               controller: controller,
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [currencyMask],
               decoration: const InputDecoration(
                 prefixText: 'R\$ ',
                 labelText: 'Valor',
@@ -104,9 +107,7 @@ class SettingsScreen extends ConsumerWidget {
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () async {
-                  final value =
-                      double.tryParse(controller.text.replaceAll(',', '.')) ?? 0;
-                  final cents = (value * 100).toInt();
+                  final cents = InputMasks.currencyToCents(controller.text);
                   await ref
                       .read(appSettingsProvider.notifier)
                       .saveMoneySetting(key, cents);
@@ -340,18 +341,6 @@ class SettingsScreen extends ConsumerWidget {
                 onChanged: (v) => ref
                     .read(appSettingsProvider.notifier)
                     .saveBoolSetting('dark_mode', v),
-                activeThumbColor: colorScheme.primary,
-              ),
-            ),
-            _SettingsTile(
-              icon: Icons.visibility_off_rounded,
-              title: 'Ocultar saldo',
-              subtitle: 'Esconder valores na tela inicial',
-              trailing: Switch(
-                value: settings.hideBalance,
-                onChanged: (v) => ref
-                    .read(appSettingsProvider.notifier)
-                    .saveBoolSetting('hide_balance', v),
                 activeThumbColor: colorScheme.primary,
               ),
             ),
