@@ -3,10 +3,29 @@ import 'package:nexa/core/models/transactions.dart';
 import 'package:nexa/core/theme/app_theme.dart';
 import 'package:nexa/core/utils/currency_formatter.dart';
 
+/// Card visual de uma transação na lista da home.
+///
+/// Responsabilidades DESTE widget:
+///   - Exibir os dados da transação
+///   - Swipe para deletar (Dismissible)
+///   - Bottom sheet com opções (editar / excluir)
+///
+/// Responsabilidades do PAI (transactions_screen):
+///   - Lógica de qual dialog mostrar (simples / recorrente / parcelado)
+///   - Invalidar providers após delete
+///
+/// Por que separar assim?
+/// O card não sabe se a transação é parte de um grupo ou recorrente no
+/// contexto da lista. Quem sabe isso é a tela. Então a lógica de "o que
+/// acontece no delete" fica na tela via callbacks.
 class TransactionCard extends StatelessWidget {
   final Transactions transaction;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
+
+  /// Callback chamado ANTES de deletar — retorna true se deve prosseguir.
+  /// Recebe o BuildContext para poder mostrar dialogs.
+  /// Se null, mostra um dialog de confirmação simples interno.
   final Future<bool> Function(BuildContext context)? onDeleteWithContext;
 
   const TransactionCard({
@@ -17,57 +36,75 @@ class TransactionCard extends StatelessWidget {
     this.onDeleteWithContext,
   });
 
-  Color _getTypeColor() {
-    if (transaction.type == 'income') return const Color(0xFF2ECC71);
-    if (transaction.type == 'investment') return Colors.blueAccent;
-    return Colors.redAccent;
+  // ─── Helpers visuais ──────────────────────────────────────────────────────
+
+  Color _typeColor() {
+    switch (transaction.type) {
+      case 'income':
+        return const Color(0xFF2ECC71);
+      case 'investment':
+        return Colors.blueAccent;
+      default:
+        return Colors.redAccent;
+    }
   }
 
-  IconData _getTypeIcon() {
-    if (transaction.type == 'income') return Icons.arrow_upward_rounded;
-    if (transaction.type == 'investment') return Icons.trending_up_rounded;
-    return Icons.arrow_downward_rounded;
+  IconData _typeIcon() {
+    switch (transaction.type) {
+      case 'income':
+        return Icons.arrow_upward_rounded;
+      case 'investment':
+        return Icons.trending_up_rounded;
+      default:
+        return Icons.arrow_downward_rounded;
+    }
   }
 
-  String _getAmountPrefix() => transaction.type == 'income' ? '+' : '-';
-
-  String _getTypeLabel() {
-    if (transaction.type == 'income') return 'Receita';
-    if (transaction.type == 'investment') return 'Investimento';
-    return 'Despesa';
+  String _typeLabel() {
+    switch (transaction.type) {
+      case 'income':
+        return 'Receita';
+      case 'investment':
+        return 'Investimento';
+      default:
+        return 'Despesa';
+    }
   }
 
+  String _amountPrefix() => transaction.type == 'income' ? '+' : '-';
+
+  // ─── Dialog de confirmação simples (fallback quando onDeleteWithContext == null)
+  //
+  // Este dialog é mais simples do que os da transactions_screen — não tem
+  // lógica de recorrência/parcelamento. Serve apenas como confirmação básica.
   Future<bool> _confirmDelete(BuildContext context) async {
-    final colorScheme = Theme.of(context).colorScheme;
-
+    final cs = Theme.of(context).colorScheme;
     final result = await showDialog<bool>(
       context: context,
       barrierColor: Colors.black54,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusModal),
-        ),
-        backgroundColor: colorScheme.surface,
+            borderRadius: BorderRadius.circular(AppTheme.radiusModal)),
+        backgroundColor: cs.surface,
         title: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: colorScheme.error.withOpacity(0.1),
+                color: cs.error.withAlpha(25),
                 borderRadius: BorderRadius.circular(AppTheme.radiusChip),
               ),
               child: Icon(Icons.delete_outline_rounded,
-                  color: colorScheme.error, size: 20),
+                  color: cs.error, size: 20),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
                 'Excluir transação',
                 style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: colorScheme.onSurface,
-                ),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: cs.onSurface),
               ),
             ),
           ],
@@ -79,43 +116,40 @@ class TransactionCard extends StatelessWidget {
             Text(
               'Tem certeza que deseja excluir esta transação?',
               style: TextStyle(
-                fontSize: 14,
-                color: colorScheme.onSurface.withOpacity(0.7),
-                height: 1.4,
-              ),
+                  fontSize: 14,
+                  color: cs.onSurface.withAlpha(178),
+                  height: 1.4),
             ),
             const SizedBox(height: 12),
+            // Preview da transação que será deletada
             Container(
               padding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: colorScheme.onSurface.withOpacity(0.05),
+                color: cs.onSurface.withAlpha(13),
                 borderRadius: BorderRadius.circular(AppTheme.radiusChip),
               ),
               child: Row(
                 children: [
                   Expanded(
                     child: Text(
-                      transaction.description != null &&
-                              transaction.description!.isNotEmpty
+                      transaction.description?.isNotEmpty == true
                           ? transaction.description!
                           : 'Sem descrição',
                       style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: colorScheme.onSurface,
-                      ),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: cs.onSurface),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    '${_getAmountPrefix()} ${CurrencyFormatter.format(transaction.amountCents)}',
+                    '${_amountPrefix()} ${CurrencyFormatter.format(transaction.amountCents)}',
                     style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: _getTypeColor(),
-                    ),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: _typeColor()),
                   ),
                 ],
               ),
@@ -128,7 +162,7 @@ class TransactionCard extends StatelessWidget {
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
             style: TextButton.styleFrom(
-              foregroundColor: colorScheme.onSurface.withOpacity(0.6),
+              foregroundColor: cs.onSurface.withAlpha(153),
               padding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             ),
@@ -138,14 +172,13 @@ class TransactionCard extends StatelessWidget {
           ElevatedButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: colorScheme.error,
+              backgroundColor: cs.error,
               foregroundColor: Colors.white,
               elevation: 0,
               padding:
                   const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-              ),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusChip)),
             ),
             child: const Text('Excluir',
                 style: TextStyle(fontWeight: FontWeight.w600)),
@@ -153,20 +186,21 @@ class TransactionCard extends StatelessWidget {
         ],
       ),
     );
-
     return result == true;
   }
 
+  // ─── Bottom sheet de opções ───────────────────────────────────────────────
+
   void _showOptions(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final cs = Theme.of(context).colorScheme;
+    final typeColor = _typeColor();
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: colorScheme.surface,
+      backgroundColor: cs.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(
-          top: Radius.circular(AppTheme.radiusModal),
-        ),
+            top: Radius.circular(AppTheme.radiusModal)),
       ),
       builder: (ctx) => SafeArea(
         child: Padding(
@@ -174,15 +208,18 @@ class TransactionCard extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Handle
               Container(
                 width: 36,
                 height: 4,
                 margin: const EdgeInsets.only(bottom: 12),
                 decoration: BoxDecoration(
-                  color: colorScheme.onSurface.withOpacity(0.15),
+                  color: cs.onSurface.withAlpha(38),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
+
+              // Preview da transação
               Padding(
                 padding: const EdgeInsets.symmetric(
                     horizontal: AppTheme.paddingScreen, vertical: 4),
@@ -192,93 +229,96 @@ class TransactionCard extends StatelessWidget {
                       width: 36,
                       height: 36,
                       decoration: BoxDecoration(
-                        color: _getTypeColor().withOpacity(0.12),
+                        color: typeColor.withAlpha(31),
                         borderRadius:
                             BorderRadius.circular(AppTheme.radiusChip),
                       ),
-                      child: Icon(_getTypeIcon(),
-                          size: 16, color: _getTypeColor()),
+                      child: Icon(_typeIcon(), size: 16, color: typeColor),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        transaction.description != null &&
-                                transaction.description!.isNotEmpty
+                        transaction.description?.isNotEmpty == true
                             ? transaction.description!
                             : 'Sem descrição',
                         style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: colorScheme.onSurface,
-                        ),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: cs.onSurface),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     Text(
-                      '${_getAmountPrefix()} ${CurrencyFormatter.format(transaction.amountCents)}',
+                      '${_amountPrefix()} ${CurrencyFormatter.format(transaction.amountCents)}',
                       style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: _getTypeColor(),
-                      ),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: typeColor),
                     ),
                   ],
                 ),
               ),
+
               const Divider(height: 20),
+
+              // Opção: Editar
               ListTile(
                 leading: Container(
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
-                    color: colorScheme.primary.withOpacity(0.08),
+                    color: cs.primary.withAlpha(20),
                     borderRadius: BorderRadius.circular(AppTheme.radiusChip),
                   ),
-                  child: Icon(Icons.edit_outlined,
-                      size: 18, color: colorScheme.primary),
+                  child: Icon(Icons.edit_outlined, size: 18, color: cs.primary),
                 ),
                 title: Text('Editar transação',
                     style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: colorScheme.onSurface)),
+                        color: cs.onSurface)),
                 subtitle: Text('Alterar dados desta transação',
                     style: TextStyle(
                         fontSize: 12,
-                        color: colorScheme.onSurface.withOpacity(0.5))),
+                        color: cs.onSurface.withAlpha(127))),
                 onTap: () {
                   Navigator.of(ctx).pop();
                   onEdit?.call();
                 },
               ),
+
+              // Opção: Excluir
               ListTile(
                 leading: Container(
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
-                    color: colorScheme.error.withOpacity(0.08),
+                    color: cs.error.withAlpha(20),
                     borderRadius: BorderRadius.circular(AppTheme.radiusChip),
                   ),
                   child: Icon(Icons.delete_outline_rounded,
-                      size: 18, color: colorScheme.error),
+                      size: 18, color: cs.error),
                 ),
                 title: Text('Excluir transação',
                     style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: colorScheme.error)),
+                        color: cs.error)),
                 subtitle: Text('Esta ação não pode ser desfeita',
                     style: TextStyle(
                         fontSize: 12,
-                        color: colorScheme.onSurface.withOpacity(0.5))),
+                        color: cs.onSurface.withAlpha(127))),
                 onTap: () async {
                   Navigator.of(ctx).pop();
+                  // Usa o callback do pai (com lógica de recorrência/parcelas)
+                  // ou o dialog simples como fallback
                   final shouldDelete = onDeleteWithContext != null
                       ? await onDeleteWithContext!(context)
                       : await _confirmDelete(context);
                   if (shouldDelete) onDelete?.call();
                 },
               ),
+
               const SizedBox(height: 8),
             ],
           ),
@@ -287,34 +327,37 @@ class TransactionCard extends StatelessWidget {
     );
   }
 
+  // ─── Build ────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final typeColor = _getTypeColor();
-    final typeIcon = _getTypeIcon();
-    final hasNote = transaction.note != null && transaction.note!.isNotEmpty;
-    final isRecurring = transaction.isRecurring;
+    final cs = Theme.of(context).colorScheme;
+    final typeColor = _typeColor();
+    final hasNote =
+        transaction.note != null && transaction.note!.isNotEmpty;
     final isPending = transaction.status == 'pending';
 
     return Dismissible(
       key: ValueKey(transaction.id ?? transaction.hashCode),
       direction: DismissDirection.endToStart,
+
+      // Fundo vermelho com ícone de lixeira (aparece ao arrastar)
       background: Container(
         margin: const EdgeInsets.symmetric(
             horizontal: AppTheme.paddingScreen, vertical: 4),
         decoration: BoxDecoration(
-          color: colorScheme.error,
+          color: cs.error,
           borderRadius: BorderRadius.circular(AppTheme.radiusCard),
         ),
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
-        child: Column(
+        child: const Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.delete_outline_rounded,
+            Icon(Icons.delete_outline_rounded,
                 color: Colors.white, size: 22),
-            const SizedBox(height: 4),
-            const Text('Excluir',
+            SizedBox(height: 4),
+            Text('Excluir',
                 style: TextStyle(
                     color: Colors.white,
                     fontSize: 11,
@@ -322,6 +365,8 @@ class TransactionCard extends StatelessWidget {
           ],
         ),
       ),
+
+      // confirmDismiss → pergunta antes de confirmar o swipe
       confirmDismiss: (_) async {
         if (onDeleteWithContext != null) {
           return onDeleteWithContext!(context);
@@ -329,18 +374,19 @@ class TransactionCard extends StatelessWidget {
         return _confirmDelete(context);
       },
       onDismissed: (_) => onDelete?.call(),
+
       child: Container(
         margin: const EdgeInsets.symmetric(
             horizontal: AppTheme.paddingScreen, vertical: 4),
         decoration: BoxDecoration(
-          color: colorScheme.surface,
+          color: cs.surface,
           borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-          border: Border.all(color: colorScheme.onSurface.withOpacity(0.08)),
+          border: Border.all(color: cs.onSurface.withAlpha(20)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Linha principal ──────────────────────────────────
+            // ── Linha principal ──────────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(
                   AppTheme.paddingCard, 12, AppTheme.paddingCard, 10),
@@ -352,11 +398,11 @@ class TransactionCard extends StatelessWidget {
                     width: 44,
                     height: 44,
                     decoration: BoxDecoration(
-                      color: typeColor.withOpacity(0.12),
+                      color: typeColor.withAlpha(31),
                       borderRadius:
                           BorderRadius.circular(AppTheme.radiusChip),
                     ),
-                    child: Icon(typeIcon, size: 20, color: typeColor),
+                    child: Icon(_typeIcon(), size: 20, color: typeColor),
                   ),
                   const SizedBox(width: 12),
 
@@ -367,26 +413,23 @@ class TransactionCard extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          transaction.description != null &&
-                                  transaction.description!.isNotEmpty
+                          transaction.description?.isNotEmpty == true
                               ? transaction.description!
                               : 'Sem descrição',
                           style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                            color: colorScheme.onSurface,
-                          ),
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                              color: cs.onSurface),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          _getTypeLabel(),
+                          _typeLabel(),
                           style: TextStyle(
-                            fontSize: 12,
-                            color: typeColor.withOpacity(0.85),
-                            fontWeight: FontWeight.w500,
-                          ),
+                              fontSize: 12,
+                              color: typeColor.withAlpha(217),
+                              fontWeight: FontWeight.w500),
                         ),
                       ],
                     ),
@@ -394,42 +437,39 @@ class TransactionCard extends StatelessWidget {
 
                   const SizedBox(width: 8),
 
-                  // Valor
+                  // Valor + badge de pendente
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        '${_getAmountPrefix()} ${CurrencyFormatter.format(transaction.amountCents)}',
+                        '${_amountPrefix()} ${CurrencyFormatter.format(transaction.amountCents)}',
                         style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 15,
-                          color: typeColor,
-                        ),
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                            color: typeColor),
                       ),
-                      // Badge de status inline com o valor
                       if (isPending)
                         Container(
                           margin: const EdgeInsets.only(top: 2),
                           padding: const EdgeInsets.symmetric(
                               horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: AppTheme.accentColor.withOpacity(0.12),
+                            color: AppTheme.accentColor.withAlpha(31),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
                             'pendente',
                             style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: AppTheme.accentColor,
-                            ),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.accentColor),
                           ),
                         ),
                     ],
                   ),
 
-                  // Menu
+                  // Botão de opções
                   const SizedBox(width: 4),
                   GestureDetector(
                     onTap: () => _showOptions(context),
@@ -438,7 +478,7 @@ class TransactionCard extends StatelessWidget {
                       child: Icon(
                         Icons.more_vert_rounded,
                         size: 18,
-                        color: colorScheme.onSurface.withOpacity(0.35),
+                        color: cs.onSurface.withAlpha(89),
                       ),
                     ),
                   ),
@@ -446,65 +486,58 @@ class TransactionCard extends StatelessWidget {
               ),
             ),
 
-            // ── Linha de detalhes (sempre visível) ───────────────
+            // ── Linha de detalhes ─────────────────────────────────────
             Container(
               padding: const EdgeInsets.fromLTRB(
                   AppTheme.paddingCard, 8, AppTheme.paddingCard, 10),
               decoration: BoxDecoration(
-                color: colorScheme.onSurface.withOpacity(0.03),
+                color: cs.onSurface.withAlpha(8),
                 borderRadius: const BorderRadius.vertical(
-                  bottom: Radius.circular(AppTheme.radiusCard),
-                ),
+                    bottom: Radius.circular(AppTheme.radiusCard)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Data + recorrente
+                  // Data + badges de recorrência/parcelas
                   Row(
                     children: [
                       Icon(Icons.calendar_today_rounded,
                           size: 12,
-                          color: colorScheme.onSurface.withOpacity(0.4)),
+                          color: cs.onSurface.withAlpha(102)),
                       const SizedBox(width: 5),
                       Text(
                         transaction.date,
                         style: TextStyle(
-                          fontSize: 12,
-                          color: colorScheme.onSurface.withOpacity(0.55),
-                        ),
+                            fontSize: 12,
+                            color: cs.onSurface.withAlpha(140)),
                       ),
-                      if (isRecurring) ...[
+                      if (transaction.isRecurring) ...[
                         const SizedBox(width: 10),
                         Icon(Icons.repeat_rounded,
                             size: 12,
-                            color: colorScheme.onSurface.withOpacity(0.4)),
+                            color: cs.onSurface.withAlpha(102)),
                         const SizedBox(width: 4),
-                        Text(
-                          'recorrente',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: colorScheme.onSurface.withOpacity(0.55),
-                          ),
-                        ),
+                        Text('recorrente',
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: cs.onSurface.withAlpha(140))),
                       ],
-                      // Parcelas
-                      if (transaction.installmentTotal != null &&
-                          transaction.installmentTotal! > 1) ...[
+                      if ((transaction.installmentTotal ?? 0) > 1) ...[
                         const SizedBox(width: 10),
                         Icon(Icons.layers_rounded,
                             size: 12,
-                            color: colorScheme.onSurface.withOpacity(0.4)),
+                            color: cs.onSurface.withAlpha(102)),
                         const SizedBox(width: 4),
                         Text(
                           '${transaction.installmentCurrent ?? 1}/${transaction.installmentTotal}x',
                           style: TextStyle(
-                            fontSize: 12,
-                            color: colorScheme.onSurface.withOpacity(0.55),
-                          ),
+                              fontSize: 12,
+                              color: cs.onSurface.withAlpha(140)),
                         ),
                       ],
                     ],
                   ),
+
                   // Nota (só se existir)
                   if (hasNote) ...[
                     const SizedBox(height: 5),
@@ -513,16 +546,15 @@ class TransactionCard extends StatelessWidget {
                       children: [
                         Icon(Icons.sticky_note_2_outlined,
                             size: 12,
-                            color: colorScheme.onSurface.withOpacity(0.4)),
+                            color: cs.onSurface.withAlpha(102)),
                         const SizedBox(width: 5),
                         Expanded(
                           child: Text(
                             transaction.note!,
                             style: TextStyle(
-                              fontSize: 12,
-                              color: colorScheme.onSurface.withOpacity(0.55),
-                              fontStyle: FontStyle.italic,
-                            ),
+                                fontSize: 12,
+                                color: cs.onSurface.withAlpha(140),
+                                fontStyle: FontStyle.italic),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),

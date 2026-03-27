@@ -10,19 +10,22 @@ import 'package:nexa/features/cards/providers/cards_provider.dart';
 import 'package:nexa/features/home/provider/balance_provider.dart';
 import 'package:nexa/features/home/provider/health_score_provider.dart';
 import 'package:nexa/features/settings/providers/app_settings_provider.dart';
+import 'package:nexa/features/settings/widgets/settings_widget.dart';
 import 'package:nexa/features/transactions/providers/transactions_provider.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
+  // ─── Dialogs e Sheets ────────────────────────────────────────────────────
+
   void _showAboutDialog(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final cs = Theme.of(context).colorScheme;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppTheme.radiusModal)),
-        backgroundColor: colorScheme.surface,
+        backgroundColor: cs.surface,
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -30,56 +33,68 @@ class SettingsScreen extends ConsumerWidget {
               width: 64,
               height: 64,
               decoration: BoxDecoration(
-                color: colorScheme.primary,
+                color: cs.primary,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Icon(Icons.account_balance_wallet_rounded,
-                  color: colorScheme.onPrimary, size: 32),
+                  color: cs.onPrimary, size: 32),
             ),
             const Gap(16),
             Text('Nexa',
                 style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
-                    color: colorScheme.onSurface)),
+                    color: cs.onSurface)),
             const Gap(4),
             Text('Versão 1.0.0',
                 style: TextStyle(
-                    fontSize: 13,
-                    color: colorScheme.onSurface.withOpacity(0.5))),
+                    fontSize: 13, color: cs.onSurface.withAlpha(127))),
             const Gap(12),
-            Text('Controle financeiro pessoal simples e eficiente.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontSize: 13,
-                    color: colorScheme.onSurface.withOpacity(0.65),
-                    height: 1.4)),
+            Text(
+              'Controle financeiro pessoal simples e eficiente.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  fontSize: 13,
+                  color: cs.onSurface.withAlpha(166),
+                  height: 1.4),
+            ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: Text('Fechar',
-                style: TextStyle(
-                    fontWeight: FontWeight.w600, color: colorScheme.primary)),
+                style:
+                    TextStyle(fontWeight: FontWeight.w600, color: cs.primary)),
           ),
         ],
       ),
     );
   }
 
+  /// Sheet para inserir valores monetários (salário, reserva, etc.)
+  ///
+  /// CORREÇÃO: agora usa Form + validator, então não salva valor zero
+  /// por acidente se o usuário não preencher nada.
   void _showFinancialSheet(
     BuildContext context,
     WidgetRef ref,
     String key,
     String title,
   ) {
+    final cs = Theme.of(context).colorScheme;
     final controller = TextEditingController();
     final currencyMask = InputMasks.currency();
+    final formKey = GlobalKey<FormState>();
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: cs.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppTheme.radiusModal)),
+      ),
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(
           left: AppTheme.paddingScreen,
@@ -87,62 +102,145 @@ class SettingsScreen extends ConsumerWidget {
           top: 20,
           bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(title),
-            const Gap(16),
-            TextField(
-              controller: controller,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [currencyMask],
-              decoration: const InputDecoration(
-                prefixText: 'R\$ ',
-                labelText: 'Valor',
+        child: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Handle
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: cs.onSurface.withAlpha(38),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
               ),
-            ),
-            const Gap(16),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () async {
-                  final cents = InputMasks.currencyToCents(controller.text);
-                  await ref
-                      .read(appSettingsProvider.notifier)
-                      .saveMoneySetting(key, cents);
-
-                  ref.invalidate(healthScoreProvider);
-                  if (context.mounted) Navigator.pop(ctx);
+              Text(
+                title,
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: cs.onSurface),
+              ),
+              const Gap(16),
+              TextFormField(
+                controller: controller,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [currencyMask],
+                autofocus: true,
+                decoration: InputDecoration(
+                  prefixText: 'R\$ ',
+                  labelText: 'Valor',
+                  filled: true,
+                  fillColor: cs.surfaceContainerHighest.withAlpha(102),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.radiusChip),
+                    borderSide: BorderSide.none,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.radiusChip),
+                    borderSide: BorderSide(color: cs.onSurface.withAlpha(51)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.radiusChip),
+                    borderSide: BorderSide(color: cs.primary, width: 1.8),
+                  ),
+                  errorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.radiusChip),
+                    borderSide: BorderSide(color: cs.error),
+                  ),
+                  focusedErrorBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.radiusChip),
+                    borderSide: BorderSide(color: cs.error, width: 1.8),
+                  ),
+                ),
+                validator: (v) {
+                  if (v == null || v.isEmpty) return 'Informe um valor';
+                  if (InputMasks.currencyToCents(v) <= 0) {
+                    return 'O valor deve ser maior que zero';
+                  }
+                  return null;
                 },
-                child: const Text('Salvar'),
               ),
-            ),
-          ],
+              const Gap(16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: cs.primary,
+                    foregroundColor: cs.onPrimary,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius:
+                            BorderRadius.circular(AppTheme.radiusChip)),
+                  ),
+                  onPressed: () async {
+                    if (!formKey.currentState!.validate()) return;
+                    final cents = InputMasks.currencyToCents(controller.text);
+                    await ref
+                        .read(appSettingsProvider.notifier)
+                        .saveMoneySetting(key, cents);
+                    ref.invalidate(healthScoreProvider);
+                    if (ctx.mounted) Navigator.pop(ctx);
+                  },
+                  child: const Text('Salvar',
+                      style:
+                          TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
+  /// Dialog para adicionar nova categoria personalizada.
+  ///
+  /// CORREÇÃO: trim() no nome para evitar categorias " " (espaço em branco).
   Future<void> _showManageCategoriesDialog(
     BuildContext context,
     WidgetRef ref,
   ) async {
-    final colorScheme = Theme.of(context).colorScheme;
+    final cs = Theme.of(context).colorScheme;
     final controller = TextEditingController();
+    final formKey = GlobalKey<FormState>();
 
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppTheme.radiusModal)),
-        backgroundColor: colorScheme.surface,
-        title: const Text('Nova categoria'),
-        content: TextField(
-          controller: controller,
-          textCapitalization: TextCapitalization.sentences,
-          decoration:
-              const InputDecoration(labelText: 'Nome da categoria'),
+        backgroundColor: cs.surface,
+        title: Text('Nova categoria',
+            style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: cs.onSurface)),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: controller,
+            textCapitalization: TextCapitalization.sentences,
+            autofocus: true,
+            decoration: const InputDecoration(labelText: 'Nome da categoria'),
+            validator: (v) {
+              if (v == null || v.trim().isEmpty) {
+                return 'Informe o nome da categoria';
+              }
+              if (v.trim().length < 2) {
+                return 'Nome muito curto (mín. 2 caracteres)';
+              }
+              return null;
+            },
+          ),
         ),
         actions: [
           TextButton(
@@ -150,25 +248,27 @@ class SettingsScreen extends ConsumerWidget {
             child: const Text('Cancelar'),
           ),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: cs.primary,
+              foregroundColor: cs.onPrimary,
+              elevation: 0,
+            ),
             onPressed: () async {
-              final name = controller.text.trim();
-              if (name.isEmpty) return;
+              if (!formKey.currentState!.validate()) return;
 
-              final existingCategories =
-                  await DatabaseHelper.instance.getCategories();
-              final alreadyExists = existingCategories.any(
-                (category) => category.name.toLowerCase() == name.toLowerCase(),
+              final name = controller.text.trim();
+              final existing = await DatabaseHelper.instance.getCategories();
+
+              // Verifica duplicata (case-insensitive)
+              final alreadyExists = existing.any(
+                (c) => c.name.toLowerCase() == name.toLowerCase(),
               );
 
               if (alreadyExists) {
-                if (ctx.mounted) {
-                  Navigator.pop(ctx);
-                }
+                if (ctx.mounted) Navigator.pop(ctx);
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Essa categoria já existe.'),
-                    ),
+                    SnackBar(content: Text('A categoria "$name" já existe.')),
                   );
                 }
                 return;
@@ -184,14 +284,12 @@ class SettingsScreen extends ConsumerWidget {
               );
 
               ref.invalidate(categoriesProvider);
-              if (ctx.mounted) {
-                Navigator.pop(ctx);
-              }
+              if (ctx.mounted) Navigator.pop(ctx);
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('Categoria "$name" adicionada com sucesso!'),
-                  ),
+                      content:
+                          Text('Categoria "$name" adicionada com sucesso!')),
                 );
               }
             },
@@ -203,61 +301,63 @@ class SettingsScreen extends ConsumerWidget {
   }
 
   void _showClearDataConfirm(BuildContext context, WidgetRef ref) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final cs = Theme.of(context).colorScheme;
     showDialog(
       context: context,
       barrierColor: Colors.black54,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppTheme.radiusModal)),
-        backgroundColor: colorScheme.surface,
+        backgroundColor: cs.surface,
         title: Row(children: [
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-                color: colorScheme.error.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(AppTheme.radiusChip)),
-            child: Icon(Icons.warning_amber_rounded,
-                color: colorScheme.error, size: 20),
+              color: cs.error.withAlpha(25),
+              borderRadius: BorderRadius.circular(AppTheme.radiusChip),
+            ),
+            child: Icon(Icons.warning_amber_rounded, color: cs.error, size: 20),
           ),
           const SizedBox(width: 12),
           Expanded(
-              child: Text('Apagar dados',
-                  style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: colorScheme.onSurface))),
+            child: Text('Apagar dados',
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: cs.onSurface)),
+          ),
         ]),
         content: Text(
-            'Todos os dados serão removidos permanentemente. Esta ação não pode ser desfeita.',
-            style: TextStyle(
-                fontSize: 14,
-                color: colorScheme.onSurface.withOpacity(0.7),
-                height: 1.4)),
+          'Todos os dados serão removidos permanentemente. Esta ação não pode ser desfeita.',
+          style: TextStyle(
+              fontSize: 14, color: cs.onSurface.withAlpha(178), height: 1.4),
+        ),
         actionsPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             style: TextButton.styleFrom(
-                foregroundColor: colorScheme.onSurface.withOpacity(0.6)),
+                foregroundColor: cs.onSurface.withAlpha(153)),
             child: const Text('Cancelar',
                 style: TextStyle(fontWeight: FontWeight.w600)),
           ),
           ElevatedButton(
             onPressed: () async {
               await DatabaseHelper.instance.clearAllData();
-              ref.invalidate(categoriesProvider);
-              ref.invalidate(transactionsProvider);
-              ref.invalidate(transactionsByMonthProvider);
-              ref.invalidate(creditCardProvider);
-              ref.invalidate(balanceProvider);
-              ref.invalidate(healthScoreProvider);
-              ref.invalidate(appSettingsProvider);
-              if (context.mounted) Navigator.pop(ctx);
+              // Invalida todos os providers para resetar o estado da UI
+              ref
+                ..invalidate(categoriesProvider)
+                ..invalidate(transactionsProvider)
+                ..invalidate(transactionsByMonthProvider)
+                ..invalidate(creditCardProvider)
+                ..invalidate(balanceProvider)
+                ..invalidate(healthScoreProvider)
+                ..invalidate(appSettingsProvider);
+              if (ctx.mounted) Navigator.pop(ctx);
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: colorScheme.error,
+              backgroundColor: cs.error,
               foregroundColor: Colors.white,
               elevation: 0,
               shape: RoundedRectangleBorder(
@@ -271,83 +371,96 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
+  // ─── Build ────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final cs = Theme.of(context).colorScheme;
     final settingsAsync = ref.watch(appSettingsProvider);
 
     return settingsAsync.when(
-      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (e, _) => Scaffold(body: Center(child: Text('Erro: $e'))),
       data: (settings) => Scaffold(
-        backgroundColor: colorScheme.surface,
+        backgroundColor: cs.surface,
         appBar: AppBar(
-          backgroundColor: colorScheme.surface,
+          backgroundColor: cs.surface,
           elevation: 0,
           centerTitle: false,
-          title: Text('Configurações',
-              style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: colorScheme.onSurface)),
+          title: Text(
+            'Configurações',
+            style: TextStyle(
+                fontSize: 20, fontWeight: FontWeight.w700, color: cs.onSurface),
+          ),
         ),
         body: ListView(
           padding: const EdgeInsets.fromLTRB(
               AppTheme.paddingScreen, 8, AppTheme.paddingScreen, 40),
           children: [
-            _buildProfileCard(colorScheme),
+            // ── Perfil ──────────────────────────────────────────────
+            _ProfileCard(cs: cs),
             const Gap(24),
-            _SectionHeader(label: 'Finanças'),
+
+            // ── Finanças ────────────────────────────────────────────
+            const SettingsSectionHeader(label: 'Finanças'),
             const Gap(10),
-            _SettingsTile(
+            SettingsTile(
               icon: Icons.account_balance_wallet_rounded,
               title: 'Salário mensal',
               subtitle: settings.salaryCents == 0
                   ? 'Não configurado'
                   : CurrencyFormatter.format(settings.salaryCents),
-              trailing: const Icon(Icons.chevron_right_rounded),
+              trailing: Icon(Icons.chevron_right_rounded,
+                  color: cs.onSurface.withAlpha(89)),
               onTap: () => _showFinancialSheet(
                   context, ref, 'monthly_salary_cents', 'Salário mensal'),
             ),
-            _SettingsTile(
+            SettingsTile(
               icon: Icons.savings_rounded,
-              title: 'Meta da reserva',
+              title: 'Meta da reserva de emergência',
               subtitle: settings.emergencyGoalCents == 0
                   ? 'Não configurado'
                   : CurrencyFormatter.format(settings.emergencyGoalCents),
-              trailing: const Icon(Icons.chevron_right_rounded),
+              trailing: Icon(Icons.chevron_right_rounded,
+                  color: cs.onSurface.withAlpha(89)),
               onTap: () => _showFinancialSheet(
                   context, ref, 'emergency_goal_cents', 'Meta da reserva'),
             ),
-            _SettingsTile(
-              icon: Icons.savings_rounded,
+            SettingsTile(
+              icon: Icons.savings_outlined,
               title: 'Reserva atual',
               subtitle: settings.emergencyCurrentCents == 0
                   ? 'Não configurado'
                   : CurrencyFormatter.format(settings.emergencyCurrentCents),
-              trailing: const Icon(Icons.chevron_right_rounded),
+              trailing: Icon(Icons.chevron_right_rounded,
+                  color: cs.onSurface.withAlpha(89)),
               onTap: () => _showFinancialSheet(
                   context, ref, 'emergency_current_cents', 'Reserva atual'),
             ),
             const Gap(24),
-            _SectionHeader(label: 'Aparência'),
+
+            // ── Aparência ────────────────────────────────────────────
+            const SettingsSectionHeader(label: 'Aparência'),
             const Gap(10),
-            _SettingsTile(
+            SettingsTile(
               icon: Icons.dark_mode_rounded,
               title: 'Modo escuro',
-              subtitle: 'Ativar tema escuro',
+              subtitle: 'Ativar tema escuro no app',
               trailing: Switch(
                 value: settings.darkMode,
                 onChanged: (v) => ref
                     .read(appSettingsProvider.notifier)
                     .saveBoolSetting('dark_mode', v),
-                activeThumbColor: colorScheme.primary,
+                activeThumbColor: cs.primary,
               ),
             ),
             const Gap(24),
-            _SectionHeader(label: 'Notificações'),
+
+            // ── Notificações ─────────────────────────────────────────
+            const SettingsSectionHeader(label: 'Notificações'),
             const Gap(10),
-            _SettingsTile(
+            SettingsTile(
               icon: Icons.notifications_rounded,
               title: 'Notificações',
               subtitle: 'Alertas de transações e vencimentos',
@@ -356,42 +469,48 @@ class SettingsScreen extends ConsumerWidget {
                 onChanged: (v) => ref
                     .read(appSettingsProvider.notifier)
                     .saveBoolSetting('notifications_enabled', v),
-                activeThumbColor: colorScheme.primary,
+                activeThumbColor: cs.primary,
               ),
             ),
             const Gap(24),
-            _SectionHeader(label: 'Gerenciar Categorias'),
+
+            // ── Categorias ────────────────────────────────────────────
+            const SettingsSectionHeader(label: 'Categorias'),
             const Gap(10),
-            _SettingsTile(
+            SettingsTile(
               icon: Icons.category_rounded,
               title: 'Adicionar categoria',
               subtitle: 'Crie categorias personalizadas para transações',
               trailing: Icon(Icons.chevron_right_rounded,
-                  color: colorScheme.onSurface.withOpacity(0.35)),
+                  color: cs.onSurface.withAlpha(89)),
               onTap: () => _showManageCategoriesDialog(context, ref),
             ),
             const Gap(24),
-            _SectionHeader(label: 'Dados'),
+
+            // ── Dados ─────────────────────────────────────────────────
+            const SettingsSectionHeader(label: 'Dados'),
             const Gap(10),
-            _SettingsTile(
+            SettingsTile(
               icon: Icons.delete_forever_rounded,
               title: 'Apagar todos os dados',
               subtitle: 'Remove todas as transações e cartões',
-              iconColor: colorScheme.error,
-              titleColor: colorScheme.error,
+              iconColor: cs.error,
+              titleColor: cs.error,
               trailing: Icon(Icons.chevron_right_rounded,
-                  color: colorScheme.error.withOpacity(0.5)),
+                  color: cs.error.withAlpha(127)),
               onTap: () => _showClearDataConfirm(context, ref),
             ),
             const Gap(24),
-            _SectionHeader(label: 'Sobre'),
+
+            // ── Sobre ──────────────────────────────────────────────────
+            const SettingsSectionHeader(label: 'Sobre'),
             const Gap(10),
-            _SettingsTile(
+            SettingsTile(
               icon: Icons.info_outline_rounded,
               title: 'Sobre o Nexa',
               subtitle: 'Versão 1.0.0',
               trailing: Icon(Icons.chevron_right_rounded,
-                  color: colorScheme.onSurface.withOpacity(0.35)),
+                  color: cs.onSurface.withAlpha(89)),
               onTap: () => _showAboutDialog(context),
             ),
           ],
@@ -399,12 +518,21 @@ class SettingsScreen extends ConsumerWidget {
       ),
     );
   }
+}
 
-  Widget _buildProfileCard(ColorScheme colorScheme) {
+// ─── Widgets internos ────────────────────────────────────────────────────────
+
+class _ProfileCard extends StatelessWidget {
+  final ColorScheme cs;
+
+  const _ProfileCard({required this.cs});
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(AppTheme.paddingCard),
       decoration: BoxDecoration(
-        color: colorScheme.primary,
+        color: cs.primary,
         borderRadius: BorderRadius.circular(AppTheme.radiusCard),
       ),
       child: Row(
@@ -413,11 +541,10 @@ class SettingsScreen extends ConsumerWidget {
             width: 52,
             height: 52,
             decoration: BoxDecoration(
-              color: colorScheme.onPrimary.withOpacity(0.15),
+              color: cs.onPrimary.withAlpha(38),
               shape: BoxShape.circle,
             ),
-            child: Icon(Icons.person_rounded,
-                color: colorScheme.onPrimary, size: 26),
+            child: Icon(Icons.person_rounded, color: cs.onPrimary, size: 26),
           ),
           const Gap(14),
           Expanded(
@@ -428,102 +555,14 @@ class SettingsScreen extends ConsumerWidget {
                     style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
-                        color: colorScheme.onPrimary)),
+                        color: cs.onPrimary)),
                 Text('Conta pessoal',
                     style: TextStyle(
-                        fontSize: 13,
-                        color: colorScheme.onPrimary.withOpacity(0.65))),
+                        fontSize: 13, color: cs.onPrimary.withAlpha(166))),
               ],
             ),
           ),
         ],
-      ),
-    );
-  }
-
-}
-
-class _SectionHeader extends StatelessWidget {
-  final String label;
-  const _SectionHeader({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(label.toUpperCase(),
-        style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1.2,
-            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.45)));
-  }
-}
-
-class _SettingsTile extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Widget trailing;
-  final VoidCallback? onTap;
-  final Color? iconColor;
-  final Color? titleColor;
-
-  const _SettingsTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.trailing,
-    this.onTap,
-    this.iconColor,
-    this.titleColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(
-            horizontal: AppTheme.paddingCard, vertical: 12),
-        decoration: BoxDecoration(
-          color: colorScheme.surface,
-          borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-          border: Border.all(color: colorScheme.onSurface.withOpacity(0.08)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: (iconColor ?? colorScheme.primary).withOpacity(0.08),
-                borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-              ),
-              child:
-                  Icon(icon, size: 18, color: iconColor ?? colorScheme.primary),
-            ),
-            const Gap(12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title,
-                      style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: titleColor ?? colorScheme.onSurface)),
-                  Text(subtitle,
-                      style: TextStyle(
-                          fontSize: 12,
-                          color: colorScheme.onSurface.withOpacity(0.5))),
-                ],
-              ),
-            ),
-            trailing,
-          ],
-        ),
       ),
     );
   }

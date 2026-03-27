@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
@@ -15,6 +16,7 @@ import '../../../core/models/transactions.dart';
 
 class AddTransactionsScreen extends ConsumerStatefulWidget {
   final Transactions? transaction;
+
   const AddTransactionsScreen({super.key, this.transaction});
 
   @override
@@ -22,324 +24,85 @@ class AddTransactionsScreen extends ConsumerStatefulWidget {
       _AddTransactionsScreenState();
 }
 
-class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
-  bool _isRecurring = false;
+class _AddTransactionsScreenState
+    extends ConsumerState<AddTransactionsScreen> {
+  // ─── Controladores ──────────────────────────────────────────────────────
+  final _formKey = GlobalKey<FormState>();
   final _dateController = TextEditingController();
   final _amountController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _noteController = TextEditingController();
   final _installmentController = TextEditingController();
   final _installmentCurrentController = TextEditingController();
-  final _formKey = GlobalKey<FormState>();
+  late final _currencyMask = InputMasks.currency();
+
+  // ─── Estado ─────────────────────────────────────────────────────────────
   String? _selectedType;
   String? _selectedStatus;
   String? _selectedDateForDb;
   int? _selectedCardId;
   int? _selectedCategoryId;
+  bool _isRecurring = false;
   bool _triedToSave = false;
-  late final _currencyMask = InputMasks.currency();
 
-  final _types = [
-    _TransactionType(
-        'expense', 'Despesa', Icons.arrow_downward_rounded, Colors.redAccent),
-    _TransactionType(
-        'income', 'Receita', Icons.arrow_upward_rounded, Color(0xFF2ECC71)),
+  // ─── Dados estáticos ────────────────────────────────────────────────────
+  static const _types = [
+    _TxType('expense', 'Despesa', Icons.arrow_downward_rounded,
+        Colors.redAccent),
+    _TxType('income', 'Receita', Icons.arrow_upward_rounded,
+        Color(0xFF2ECC71)),
   ];
 
-  int? _resolveCategoryId(List<Categories> categories) {
-    if (_selectedCategoryId != null &&
-        categories.any((category) => category.id == _selectedCategoryId)) {
-      return _selectedCategoryId;
-    }
-
-    for (final category in categories) {
-      if (category.name.toLowerCase() == 'sem categoria') {
-        return category.id;
-      }
-    }
-
-    return categories.isNotEmpty ? categories.first.id : null;
-  }
-
-  List<int> _splitInstallmentAmount(int totalAmountCents, int installments) {
-    final safeInstallments = installments <= 0 ? 1 : installments;
-    final base = totalAmountCents ~/ safeInstallments;
-    final remainder = totalAmountCents % safeInstallments;
-    return List<int>.generate(
-      safeInstallments,
-      (index) => base + (index < remainder ? 1 : 0),
-      growable: false,
-    );
-  }
+  // ─── Ciclo de vida ──────────────────────────────────────────────────────
 
   @override
   void initState() {
     super.initState();
-    if (widget.transaction != null) {
-      _amountController.text =
-          InputMasks.centsToCurrencyText(widget.transaction!.amountCents);
-      _selectedType = widget.transaction!.type;
-      _selectedStatus = widget.transaction!.status;
-      _selectedCardId = widget.transaction!.creditCardsId;
-      _selectedCategoryId = widget.transaction!.categoryID;
-      _descriptionController.text = widget.transaction!.description ?? '';
-      final date = DateFormat('yyyy-MM-dd').parse(widget.transaction!.date);
-      _dateController.text =
-          DateFormat('dd/MM/yyyy').format(date); // formata para dd/MM/yyyy
-      _selectedDateForDb = widget.transaction!.date;
-      _isRecurring = widget.transaction!.isRecurring;
-      _noteController.text = widget.transaction!.note ?? '';
-      _installmentController.text =
-          widget.transaction!.installmentTotal?.toString() ?? '';
-      _installmentCurrentController.text =
-          widget.transaction!.installmentCurrent?.toString() ?? '1';
+    _initFields();
+  }
 
-      final groupId = widget.transaction!.installmentGroupId;
-      if ((widget.transaction!.installmentTotal ?? 1) > 1 &&
+  void _initFields() {
+    final tx = widget.transaction;
+    if (tx != null) {
+      // Modo edição: preenche com os dados existentes
+      _amountController.text =
+          InputMasks.centsToCurrencyText(tx.amountCents);
+      _selectedType = tx.type;
+      _selectedStatus = tx.status;
+      _selectedCardId = tx.creditCardsId;
+      _selectedCategoryId = tx.categoryID;
+      _descriptionController.text = tx.description ?? '';
+      _noteController.text = tx.note ?? '';
+      _isRecurring = tx.isRecurring;
+      _installmentController.text = tx.installmentTotal?.toString() ?? '';
+      _installmentCurrentController.text =
+          tx.installmentCurrent?.toString() ?? '1';
+
+      final date = DateFormat('yyyy-MM-dd').parse(tx.date);
+      _dateController.text = DateFormat('dd/MM/yyyy').format(date);
+      _selectedDateForDb = tx.date;
+
+      // Para parceladas: busca o total do grupo para exibir no campo de valor
+      final groupId = tx.installmentGroupId;
+      if ((tx.installmentTotal ?? 1) > 1 &&
           groupId != null &&
           groupId.isNotEmpty) {
         WidgetsBinding.instance.addPostFrameCallback((_) async {
-          final total =
-              await DatabaseHelper.instance.getInstallmentGroupTotalAmount(groupId);
+          final total = await DatabaseHelper.instance
+              .getInstallmentGroupTotalAmount(groupId);
           if (!mounted) return;
-          _amountController.text = InputMasks.centsToCurrencyText(total);
+          setState(() {
+            _amountController.text = InputMasks.centsToCurrencyText(total);
+          });
         });
       }
     } else {
-      final now = DateTime.now();
+      // Modo criação: valores padrão
       _selectedStatus = 'confirmed';
+      _installmentCurrentController.text = '1';
+      final now = DateTime.now();
       _selectedDateForDb = DateFormat('yyyy-MM-dd').format(now);
       _dateController.text = DateFormat('dd/MM/yyyy').format(now);
-      _installmentCurrentController.text = '1';
-    }
-  }
-
-  // Decoração COMPACTA — sem ícone, para campos usados lado a lado (~half screen)
-  InputDecoration _fieldDecorationCompact(String label) {
-    return InputDecoration(
-      labelText: label,
-      filled: true,
-      fillColor: Theme.of(context)
-          .colorScheme
-          .surfaceContainerHighest
-          .withOpacity(0.4),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-        borderSide: BorderSide.none,
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-        borderSide:
-            BorderSide(color: Theme.of(context).dividerColor.withOpacity(0.3)),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-        borderSide: BorderSide(
-            color: Theme.of(context).colorScheme.primary, width: 1.8),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-        borderSide: BorderSide(color: Theme.of(context).colorScheme.error),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-        borderSide:
-            BorderSide(color: Theme.of(context).colorScheme.error, width: 1.8),
-      ),
-      labelStyle: TextStyle(
-          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.55),
-          fontSize: 13),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-      isDense: true,
-    );
-  }
-
-  // Decoração NORMAL — com ícone, para campos em largura total
-  InputDecoration _fieldDecoration(String label, {IconData? icon}) {
-    return InputDecoration(
-      labelText: label,
-      prefixIcon: icon != null
-          ? Icon(icon,
-              size: 18,
-              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.55))
-          : null,
-      filled: true,
-      fillColor: Theme.of(context)
-          .colorScheme
-          .surfaceContainerHighest
-          .withOpacity(0.4),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-        borderSide: BorderSide.none,
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-        borderSide:
-            BorderSide(color: Theme.of(context).dividerColor.withOpacity(0.3)),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-        borderSide: BorderSide(
-            color: Theme.of(context).colorScheme.primary, width: 1.8),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-        borderSide: BorderSide(color: Theme.of(context).colorScheme.error),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-        borderSide:
-            BorderSide(color: Theme.of(context).colorScheme.error, width: 1.8),
-      ),
-      labelStyle: TextStyle(
-          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.55),
-          fontSize: 14),
-    );
-  }
-
-  Future<void> _saveTransaction() async {
-    setState(() => _triedToSave = true);
-    if (_selectedType == null) return;
-    if (_formKey.currentState!.validate()) {
-      final categories = await DatabaseHelper.instance.getCategories();
-      final resolvedCategoryId = _resolveCategoryId(categories);
-
-      if (resolvedCategoryId == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Nenhuma categoria disponível.'),
-            ),
-          );
-        }
-        return;
-      }
-
-      _selectedCategoryId = resolvedCategoryId;
-
-      final amount = InputMasks.currencyToCents(_amountController.text);
-      final recurringId = _isRecurring
-          ? (widget.transaction?.recurringId ?? const Uuid().v4())
-          : null;
-      final recurringParentId =
-          _isRecurring ? (widget.transaction?.parentId ?? widget.transaction?.id) : null;
-      final totalParcelas = int.tryParse(_installmentController.text) ??
-          widget.transaction?.installmentTotal ??
-          1;
-      final parcelaAtualInformada = int.tryParse(_installmentCurrentController.text);
-      final installmentCurrent = (parcelaAtualInformada ??
-              widget.transaction?.installmentCurrent ??
-              1)
-          .clamp(1, totalParcelas);
-
-      final installmentAmounts = _splitInstallmentAmount(amount, totalParcelas);
-
-      if (widget.transaction == null && totalParcelas > 1) {
-        final groupId = const Uuid().v4();
-        final baseDate = DateFormat('yyyy-MM-dd').parse(_selectedDateForDb!);
-        for (int i = 0; i < totalParcelas; i++) {
-          final parcelaDate = DateTime(
-            baseDate.year,
-            baseDate.month + i,
-            baseDate.day,
-          );
-
-          final transaction = Transactions(
-            amountCents: installmentAmounts[i],
-            type: _selectedType!,
-            status: _selectedStatus ?? 'confirmed',
-            description: _descriptionController.text,
-            date: DateFormat('yyyy-MM-dd').format(parcelaDate),
-            categoryID: resolvedCategoryId,
-            creditCardsId: _selectedCardId,
-            installmentTotal: totalParcelas,
-            installmentCurrent: i + 1,
-            installmentGroupId: groupId,
-            isRecurring: _isRecurring,
-            recurringId: recurringId,
-            parentId: recurringParentId,
-            createdFromNotification: false,
-            note: _noteController.text.isEmpty ? null : _noteController.text,
-          );
-          await DatabaseHelper.instance.insertTransaction(transaction);
-        }
-        ref.invalidate(transactionsByMonthProvider);
-        ref.invalidate(transactionsProvider);
-        ref.invalidate(healthScoreProvider);
-        ref.invalidate(balanceProvider);
-        ref.invalidate(cardLimitDetailsProvider);
-        Navigator.pop(context);
-      } else {
-        final shouldUpdateInstallmentGroup =
-            widget.transaction != null &&
-                (widget.transaction!.installmentTotal ?? 1) > 1 &&
-                (widget.transaction!.installmentGroupId?.isNotEmpty ?? false);
-
-        if (shouldUpdateInstallmentGroup) {
-          final installments = await DatabaseHelper.instance
-              .getInstallmentsByGroup(widget.transaction!.installmentGroupId!);
-
-          if (installments.isNotEmpty) {
-            final splitAmounts = _splitInstallmentAmount(amount, installments.length);
-            for (int i = 0; i < installments.length; i++) {
-              final installment = installments[i];
-              final updatedInstallment = Transactions(
-                id: installment.id,
-                amountCents: splitAmounts[i],
-                type: _selectedType!,
-                status: _selectedStatus ?? 'confirmed',
-                description: _descriptionController.text,
-                date: installment.date,
-                categoryID: resolvedCategoryId,
-                creditCardsId: _selectedCardId,
-                installmentTotal: installments.length,
-                installmentCurrent: i + 1,
-                installmentGroupId: widget.transaction!.installmentGroupId,
-                isRecurring: _isRecurring,
-                recurringId: recurringId,
-                parentId: installment.parentId ?? recurringParentId,
-                createdFromNotification: installment.createdFromNotification,
-                note: _noteController.text.isEmpty ? null : _noteController.text,
-                createdAt: installment.createdAt,
-              );
-              await DatabaseHelper.instance.updateTransaction(updatedInstallment);
-            }
-          }
-        } else {
-          final transaction = Transactions(
-            id: widget.transaction?.id,
-            amountCents: totalParcelas > 1 ? installmentAmounts.first : amount,
-            type: _selectedType!,
-            status: _selectedStatus ?? 'confirmed',
-            description: _descriptionController.text,
-            date:
-                _selectedDateForDb ?? widget.transaction?.date ?? _dateController.text,
-            categoryID: resolvedCategoryId,
-            creditCardsId: _selectedCardId,
-            installmentTotal: totalParcelas > 1 ? totalParcelas : null,
-            installmentCurrent: totalParcelas > 1 ? installmentCurrent : null,
-            installmentGroupId:
-                totalParcelas > 1 ? widget.transaction?.installmentGroupId : null,
-            isRecurring: _isRecurring,
-            recurringId: recurringId,
-            parentId: recurringParentId,
-            createdFromNotification: false,
-            note: _noteController.text.isEmpty ? null : _noteController.text,
-          );
-
-          if (widget.transaction != null) {
-            await DatabaseHelper.instance.updateTransaction(transaction);
-          } else {
-            await DatabaseHelper.instance.insertTransaction(transaction);
-          }
-        }
-        ref.invalidate(transactionsByMonthProvider);
-        ref.invalidate(transactionsProvider);
-        ref.invalidate(balanceProvider);
-        ref.invalidate(healthScoreProvider);
-        ref.invalidate(cardLimitDetailsProvider);
-        Navigator.pop(context);
-      }
     }
   }
 
@@ -354,13 +117,260 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
     super.dispose();
   }
 
+  // ─── Lógica de salvamento ────────────────────────────────────────────────
+
+  /// Divide o valor total entre as parcelas de forma justa.
+  ///
+  /// Ex: R$10 em 3 parcelas → [R$3,34, R$3,33, R$3,33]
+  /// O centavo "sobrando" vai para a primeira parcela.
+  List<int> _splitAmount(int totalCents, int installments) {
+    final safe = installments <= 0 ? 1 : installments;
+    final base = totalCents ~/ safe;
+    final remainder = totalCents % safe;
+    return List<int>.generate(
+        safe, (i) => base + (i < remainder ? 1 : 0),
+        growable: false);
+  }
+
+  int? _resolveCategoryId(List<Categories> categories) {
+    if (_selectedCategoryId != null &&
+        categories.any((c) => c.id == _selectedCategoryId)) {
+      return _selectedCategoryId;
+    }
+    // Fallback: "Sem categoria"
+    for (final c in categories) {
+      if (c.name.toLowerCase() == 'sem categoria') return c.id;
+    }
+    return categories.isNotEmpty ? categories.first.id : null;
+  }
+
+  /// Invalida todos os providers afetados por uma transação.
+  void _invalidateAll() {
+    ref.invalidate(transactionsByMonthProvider);
+    ref.invalidate(transactionsProvider);
+    ref.invalidate(healthScoreProvider);
+    ref.invalidate(balanceProvider);
+    ref.invalidate(cardLimitDetailsProvider);
+  }
+
+  Future<void> _save() async {
+    setState(() => _triedToSave = true);
+
+    // Validação manual do tipo (não é campo de formulário padrão)
+    if (_selectedType == null) return;
+
+    if (!_formKey.currentState!.validate()) return;
+
+    final categories = await DatabaseHelper.instance.getCategories();
+    final categoryId = _resolveCategoryId(categories);
+    if (categoryId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Nenhuma categoria disponível.')),
+        );
+      }
+      return;
+    }
+
+    final amount = InputMasks.currencyToCents(_amountController.text);
+    final totalParcelas =
+        int.tryParse(_installmentController.text.trim()) ?? 1;
+    final parcelaAtual =
+        (int.tryParse(_installmentCurrentController.text.trim()) ?? 1)
+            .clamp(1, totalParcelas);
+
+    final recurringId = _isRecurring
+        ? (widget.transaction?.recurringId ?? const Uuid().v4())
+        : null;
+    final recurringParentId = _isRecurring
+        ? (widget.transaction?.parentId ?? widget.transaction?.id)
+        : null;
+
+    final db = DatabaseHelper.instance;
+
+    // ── CASO 1: Nova transação parcelada ─────────────────────────────────
+    if (widget.transaction == null && totalParcelas > 1) {
+      final groupId = const Uuid().v4();
+      final baseDate =
+          DateFormat('yyyy-MM-dd').parse(_selectedDateForDb!);
+      final amounts = _splitAmount(amount, totalParcelas);
+
+      for (int i = 0; i < totalParcelas; i++) {
+        final parcelaDate = DateTime(
+            baseDate.year, baseDate.month + i, baseDate.day);
+        await db.insertTransaction(Transactions(
+          amountCents: amounts[i],
+          type: _selectedType!,
+          status: _selectedStatus ?? 'confirmed',
+          description: _descriptionController.text.trim().isEmpty
+              ? null
+              : _descriptionController.text.trim(),
+          date: DateFormat('yyyy-MM-dd').format(parcelaDate),
+          categoryID: categoryId,
+          creditCardsId: _selectedCardId,
+          installmentTotal: totalParcelas,
+          installmentCurrent: i + 1,
+          installmentGroupId: groupId,
+          isRecurring: false,
+          recurringId: null,
+          parentId: null,
+          createdFromNotification: false,
+          note: _noteController.text.trim().isEmpty
+              ? null
+              : _noteController.text.trim(),
+        ));
+      }
+    }
+    // ── CASO 2: Edição de compra parcelada → atualiza todo o grupo ───────
+    else if (widget.transaction != null &&
+        (widget.transaction!.installmentTotal ?? 1) > 1 &&
+        (widget.transaction!.installmentGroupId?.isNotEmpty ?? false)) {
+      final installments = await db
+          .getInstallmentsByGroup(widget.transaction!.installmentGroupId!);
+      if (installments.isNotEmpty) {
+        final amounts = _splitAmount(amount, installments.length);
+        for (int i = 0; i < installments.length; i++) {
+          final inst = installments[i];
+          await db.updateTransaction(Transactions(
+            id: inst.id,
+            amountCents: amounts[i],
+            type: _selectedType!,
+            status: _selectedStatus ?? 'confirmed',
+            description: _descriptionController.text.trim().isEmpty
+                ? null
+                : _descriptionController.text.trim(),
+            date: inst.date,
+            categoryID: categoryId,
+            creditCardsId: _selectedCardId,
+            installmentTotal: installments.length,
+            installmentCurrent: i + 1,
+            installmentGroupId: widget.transaction!.installmentGroupId,
+            isRecurring: _isRecurring,
+            recurringId: recurringId,
+            parentId: inst.parentId ?? recurringParentId,
+            createdFromNotification: inst.createdFromNotification,
+            note: _noteController.text.trim().isEmpty
+                ? null
+                : _noteController.text.trim(),
+            createdAt: inst.createdAt,
+          ));
+        }
+      }
+    }
+    // ── CASO 3: Transação simples (nova ou edição) ────────────────────────
+    else {
+      final amounts = _splitAmount(amount, totalParcelas);
+      final tx = Transactions(
+        id: widget.transaction?.id,
+        amountCents: amounts.first,
+        type: _selectedType!,
+        status: _selectedStatus ?? 'confirmed',
+        description: _descriptionController.text.trim().isEmpty
+            ? null
+            : _descriptionController.text.trim(),
+        date: _selectedDateForDb ??
+            widget.transaction?.date ??
+            _dateController.text,
+        categoryID: categoryId,
+        creditCardsId: _selectedCardId,
+        installmentTotal: totalParcelas > 1 ? totalParcelas : null,
+        installmentCurrent: totalParcelas > 1 ? parcelaAtual : null,
+        installmentGroupId: totalParcelas > 1
+            ? widget.transaction?.installmentGroupId
+            : null,
+        isRecurring: _isRecurring,
+        recurringId: recurringId,
+        parentId: recurringParentId,
+        createdFromNotification: false,
+        note: _noteController.text.trim().isEmpty
+            ? null
+            : _noteController.text.trim(),
+      );
+      if (widget.transaction != null) {
+        await db.updateTransaction(tx);
+      } else {
+        await db.insertTransaction(tx);
+      }
+    }
+
+    _invalidateAll();
+    if (mounted) Navigator.pop(context);
+  }
+
+  // ─── Decorações de campo ─────────────────────────────────────────────────
+
+  /// Campo em largura total (com ícone)
+  InputDecoration _dec(String label, {IconData? icon}) {
+    final cs = Theme.of(context).colorScheme;
+    return InputDecoration(
+      labelText: label,
+      prefixIcon: icon != null
+          ? Icon(icon, size: 18, color: cs.onSurface.withAlpha(140))
+          : null,
+      filled: true,
+      fillColor: cs.surfaceContainerHighest.withAlpha(102),
+      border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusChip),
+          borderSide: BorderSide.none),
+      enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusChip),
+          borderSide:
+              BorderSide(color: cs.onSurface.withAlpha(77))),
+      focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusChip),
+          borderSide: BorderSide(color: cs.primary, width: 1.8)),
+      errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusChip),
+          borderSide: BorderSide(color: cs.error)),
+      focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusChip),
+          borderSide: BorderSide(color: cs.error, width: 1.8)),
+      labelStyle:
+          TextStyle(color: cs.onSurface.withAlpha(140), fontSize: 14),
+    );
+  }
+
+  /// Campo compacto (sem ícone, para uso lado a lado)
+  InputDecoration _decCompact(String label) {
+    final cs = Theme.of(context).colorScheme;
+    return InputDecoration(
+      labelText: label,
+      filled: true,
+      fillColor: cs.surfaceContainerHighest.withAlpha(102),
+      border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusChip),
+          borderSide: BorderSide.none),
+      enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusChip),
+          borderSide:
+              BorderSide(color: cs.onSurface.withAlpha(77))),
+      focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusChip),
+          borderSide: BorderSide(color: cs.primary, width: 1.8)),
+      errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusChip),
+          borderSide: BorderSide(color: cs.error)),
+      focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusChip),
+          borderSide: BorderSide(color: cs.error, width: 1.8)),
+      labelStyle:
+          TextStyle(color: cs.onSurface.withAlpha(140), fontSize: 13),
+      contentPadding:
+          const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+      isDense: true,
+    );
+  }
+
+  // ─── Build ───────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final cs = Theme.of(context).colorScheme;
     final cardsAsync = ref.watch(creditCardProvider);
     final categoriesAsync = ref.watch(categoriesProvider);
+
     return Scaffold(
-      backgroundColor: colorScheme.surface,
+      backgroundColor: cs.surface,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -373,13 +383,9 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
         key: _formKey,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(
-            AppTheme.paddingScreen,
-            0,
-            AppTheme.paddingScreen,
-            40,
-          ),
+              AppTheme.paddingScreen, 0, AppTheme.paddingScreen, 40),
           children: [
-            // --- Cabeçalho ---
+            // ── Cabeçalho ──────────────────────────────────────────────
             Text(
               widget.transaction != null
                   ? 'Editar Transação'
@@ -392,51 +398,48 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
             Text(
               'Preencha os dados abaixo',
               style: TextStyle(
-                  color: colorScheme.onSurface.withOpacity(0.55), fontSize: 14),
+                  color: cs.onSurface.withAlpha(140), fontSize: 14),
             ),
             const Gap(28),
 
-            // --- Valor ---
-            // prefixText (String) ao invés de prefix (Widget) evita o overflow
-            // do Row interno do InputDecorator com fontes grandes
-            _SectionLabel(label: 'Valor'),
+            // ── Valor ──────────────────────────────────────────────────
+            _SectionLabel('Valor'),
             const Gap(8),
             TextFormField(
               controller: _amountController,
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
               style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.5,
-              ),
-              decoration: _fieldDecoration('0,00').copyWith(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.5),
+              decoration: _dec('0,00').copyWith(
                 prefixText: 'R\$ ',
                 prefixStyle: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  color:
-                      Theme.of(context).colorScheme.onSurface.withOpacity(0.55),
-                ),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                    color: cs.onSurface.withAlpha(140)),
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 20),
               ),
               inputFormatters: [_currencyMask],
-              validator: (value) {
-                if (value == null || value.isEmpty) return 'Informe um valor';
-                if (InputMasks.currencyToCents(value) <= 0) {
-                  return 'Valor inválido';
+              validator: (v) {
+                if (v == null || v.isEmpty) return 'Informe um valor';
+                if (InputMasks.currencyToCents(v) <= 0) {
+                  return 'Valor deve ser maior que zero';
                 }
                 return null;
               },
             ),
             const Gap(24),
 
-            // --- Tipo ---
-            _SectionLabel(label: 'Tipo'),
+            // ── Tipo ───────────────────────────────────────────────────
+            _SectionLabel('Tipo'),
             const Gap(10),
             Row(
-              children: _types.map((type) {
+              children: _types.asMap().entries.map((entry) {
+                final idx = entry.key;
+                final type = entry.value;
                 final isSelected = _selectedType == type.value;
                 return Expanded(
                   child: GestureDetector(
@@ -447,18 +450,18 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 180),
                       margin: EdgeInsets.only(
-                        right: type != _types.last ? 10 : 0,
-                      ),
+                          right: idx < _types.length - 1 ? 10 : 0),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? type.color.withOpacity(0.15)
-                            : colorScheme.surfaceContainerHighest
-                                .withOpacity(0.4),
+                            ? type.color.withAlpha(38)
+                            : cs.surfaceContainerHighest.withAlpha(102),
                         borderRadius:
                             BorderRadius.circular(AppTheme.radiusChip),
                         border: Border.all(
-                          color: isSelected ? type.color : Colors.transparent,
+                          color: isSelected
+                              ? type.color
+                              : Colors.transparent,
                           width: 1.5,
                         ),
                       ),
@@ -472,7 +475,6 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
                           const Gap(5),
                           Text(
                             type.label,
-                            textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: isSelected
@@ -495,43 +497,34 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
                 padding: const EdgeInsets.only(top: 6, left: 4),
                 child: Text(
                   'Selecione um tipo',
-                  style: TextStyle(color: Colors.redAccent, fontSize: 12),
+                  style: TextStyle(color: cs.error, fontSize: 12),
                 ),
               ),
             const Gap(24),
 
-            // --- Detalhes: Status + Data lado a lado ---
-            // crossAxisAlignment.start é obrigatório para que as mensagens
-            // de erro sob cada campo não forcem overflow vertical no Row
-            _SectionLabel(label: 'Detalhes'),
+            // ── Detalhes: Status + Data ────────────────────────────────
+            _SectionLabel('Detalhes'),
             const Gap(10),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    decoration: _fieldDecorationCompact('Status'),
-                    borderRadius: BorderRadius.circular(AppTheme.radiusChip),
+                    decoration: _decCompact('Status'),
+                    borderRadius:
+                        BorderRadius.circular(AppTheme.radiusChip),
                     isExpanded: true,
-                    initialValue: _selectedStatus,
-                    validator: null,
-                    onChanged: (value) =>
-                        setState(() => _selectedStatus = value),
+                    value: _selectedStatus,
+                    onChanged: (v) => setState(() => _selectedStatus = v),
                     items: const [
                       DropdownMenuItem(
-                        value: 'pending',
-                        child: Text(
-                          'Pendente',
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
+                          value: 'pending',
+                          child: Text('Pendente',
+                              overflow: TextOverflow.ellipsis)),
                       DropdownMenuItem(
-                        value: 'confirmed',
-                        child: Text(
-                          'Confirmado',
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
+                          value: 'confirmed',
+                          child: Text('Confirmado',
+                              overflow: TextOverflow.ellipsis)),
                     ],
                   ),
                 ),
@@ -539,27 +532,28 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
                 Expanded(
                   child: TextFormField(
                     controller: _dateController,
-                    decoration: _fieldDecorationCompact('Data'),
+                    decoration: _decCompact('Data'),
                     readOnly: true,
-                    validator: (value) =>
-                        (value == null || value.isEmpty) ? 'Informe' : null,
+                    validator: (v) =>
+                        (v == null || v.isEmpty) ? 'Informe a data' : null,
                     onTap: () async {
-                      final initialDate = _selectedDateForDb != null
-                          ? DateFormat('yyyy-MM-dd').parse(_selectedDateForDb!)
+                      final initial = _selectedDateForDb != null
+                          ? DateFormat('yyyy-MM-dd')
+                              .parse(_selectedDateForDb!)
                           : DateTime.now();
                       final picked = await showDatePicker(
                         context: context,
-                        initialDate: initialDate,
+                        initialDate: initial,
                         firstDate: DateTime(2020),
                         lastDate: DateTime(2030),
                       );
                       if (picked != null) {
-                        // exibição legível para o usuário
-                        _dateController.text =
-                            DateFormat('dd/MM/yyyy').format(picked);
-                        // formato ISO para persistência no SQLite
-                        _selectedDateForDb =
-                            DateFormat('yyyy-MM-dd').format(picked);
+                        setState(() {
+                          _dateController.text =
+                              DateFormat('dd/MM/yyyy').format(picked);
+                          _selectedDateForDb =
+                              DateFormat('yyyy-MM-dd').format(picked);
+                        });
                       }
                     },
                   ),
@@ -570,109 +564,132 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
             TextFormField(
               controller: _descriptionController,
               decoration:
-                  _fieldDecoration('Descrição', icon: Icons.edit_note_rounded),
+                  _dec('Descrição', icon: Icons.edit_note_rounded),
             ),
             const Gap(24),
 
-            // --- Parcelamento ---
-            _SectionLabel(label: 'Parcelamento'),
+            // ── Parcelamento ───────────────────────────────────────────
+            _SectionLabel('Parcelamento'),
+            const Gap(6),
+            Text(
+              'Deixe em branco ou "1" para transação única.',
+              style: TextStyle(
+                  fontSize: 12, color: cs.onSurface.withAlpha(115)),
+            ),
             const Gap(10),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
                   child: TextFormField(
-                    keyboardType: TextInputType.number,
-                    decoration: _fieldDecorationCompact('Nº parcelas'),
                     controller: _installmentController,
+                    keyboardType: TextInputType.number,
+                    decoration: _decCompact('Nº parcelas'),
+                    // Só dígitos, máx 2 caracteres (até 99 parcelas)
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(2),
+                    ],
+                    validator: (v) {
+                      if (v == null || v.isEmpty) return null; // opcional
+                      final n = int.tryParse(v);
+                      if (n != null && n < 1) return 'Mín. 1';
+                      return null;
+                    },
                   ),
                 ),
                 const Gap(12),
                 Expanded(
                   child: TextFormField(
-                    keyboardType: TextInputType.number,
-                    decoration: _fieldDecorationCompact('Parcela atual'),
                     controller: _installmentCurrentController,
+                    keyboardType: TextInputType.number,
+                    decoration: _decCompact('Parcela atual'),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(2),
+                    ],
                   ),
                 ),
               ],
             ),
             const Gap(24),
 
-            // --- Categorização ---
-            _SectionLabel(label: 'Categorização'),
+            // ── Categorização ──────────────────────────────────────────
+            _SectionLabel('Categorização'),
             const Gap(10),
 
+            // Cartão
             cardsAsync.when(
               loading: () => DropdownButtonFormField<int>(
                 decoration:
-                    _fieldDecoration('Cartão', icon: Icons.credit_card_rounded),
+                    _dec('Cartão', icon: Icons.credit_card_rounded),
                 onChanged: null,
                 items: const [],
                 hint: const Text('Carregando...'),
               ),
               error: (_, __) => DropdownButtonFormField<int>(
                 decoration:
-                    _fieldDecoration('Cartão', icon: Icons.credit_card_rounded),
+                    _dec('Cartão', icon: Icons.credit_card_rounded),
                 onChanged: null,
                 items: const [],
-                hint: const Text('Nenhum cartão'),
+                hint: const Text('Erro ao carregar'),
               ),
               data: (cards) => DropdownButtonFormField<int>(
                 decoration:
-                    _fieldDecoration('Cartão', icon: Icons.credit_card_rounded),
-                initialValue: _selectedCardId,
-                onChanged: (value) => setState(() => _selectedCardId = value),
-                hint: const Text('Nenhum cartão'),
-                items: cards
-                    .map((card) => DropdownMenuItem(
-                          value: card.id,
-                          child: Text(card.name),
-                        ))
-                    .toList(),
+                    _dec('Cartão', icon: Icons.credit_card_rounded),
+                value: _selectedCardId,
+                onChanged: (v) => setState(() => _selectedCardId = v),
+                hint: const Text('Nenhum (débito/dinheiro)'),
+                items: [
+                  // Opção "nenhum"
+                  const DropdownMenuItem<int>(
+                      value: null,
+                      child: Text('Nenhum (débito/dinheiro)')),
+                  ...cards.map((c) => DropdownMenuItem(
+                      value: c.id, child: Text(c.name))),
+                ],
               ),
             ),
             const Gap(14),
+
+            // Categoria
             categoriesAsync.when(
               loading: () => DropdownButtonFormField<int>(
                 decoration:
-                    _fieldDecoration('Categoria', icon: Icons.category_rounded),
+                    _dec('Categoria', icon: Icons.category_rounded),
                 onChanged: null,
                 items: const [],
                 hint: const Text('Carregando...'),
               ),
               error: (_, __) => DropdownButtonFormField<int>(
                 decoration:
-                    _fieldDecoration('Categoria', icon: Icons.category_rounded),
+                    _dec('Categoria', icon: Icons.category_rounded),
                 onChanged: null,
                 items: const [],
-                hint: const Text('Sem categorias'),
+                hint: const Text('Erro ao carregar'),
               ),
               data: (categories) {
+                // Verifica se a categoria salva ainda existe
                 final selectedExists = categories
-                    .any((category) => category.id == _selectedCategoryId);
-                final dropdownValue = selectedExists ? _selectedCategoryId : null;
-
+                    .any((c) => c.id == _selectedCategoryId);
                 return DropdownButtonFormField<int>(
                   decoration:
-                      _fieldDecoration('Categoria', icon: Icons.category_rounded),
-                  initialValue: dropdownValue,
-                  onChanged: (value) => setState(() => _selectedCategoryId = value),
-                  hint: const Text('Categoria'),
-                  validator: (_) => null,
+                      _dec('Categoria', icon: Icons.category_rounded),
+                  value: selectedExists ? _selectedCategoryId : null,
+                  onChanged: (v) =>
+                      setState(() => _selectedCategoryId = v),
+                  hint: const Text('Selecione'),
                   items: categories
-                      .map((category) => DropdownMenuItem(
-                            value: category.id,
-                            child: Text(category.name),
-                          ))
-                      .toList(growable: false),
+                      .map((c) =>
+                          DropdownMenuItem(value: c.id, child: Text(c.name)))
+                      .toList(),
                 );
               },
             ),
             const Gap(24),
 
-            // --- Opções ---
-            _SectionLabel(label: 'Opções'),
+            // ── Opções ─────────────────────────────────────────────────
+            _SectionLabel('Opções'),
             const Gap(10),
             _OptionTile(
               icon: Icons.repeat_rounded,
@@ -683,36 +700,37 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
             ),
             const Gap(14),
 
-            // --- Nota ---
+            // ── Nota ───────────────────────────────────────────────────
             TextFormField(
               controller: _noteController,
               maxLines: 3,
-              decoration: _fieldDecoration(
-                'Nota (opcional)',
-                icon: Icons.sticky_note_2_rounded,
-              ).copyWith(alignLabelWithHint: true),
+              decoration:
+                  _dec('Nota (opcional)', icon: Icons.sticky_note_2_rounded)
+                      .copyWith(alignLabelWithHint: true),
             ),
             const Gap(32),
 
-            // --- Salvar ---
+            // ── Botão salvar ───────────────────────────────────────────
             SizedBox(
               width: double.infinity,
               height: 54,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: colorScheme.primary,
-                  foregroundColor: colorScheme.onPrimary,
+                  backgroundColor: cs.primary,
+                  foregroundColor: cs.onPrimary,
                   elevation: 0,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.radiusChip),
+                    borderRadius:
+                        BorderRadius.circular(AppTheme.radiusChip),
                   ),
                 ),
-                onPressed: _saveTransaction,
+                onPressed: _save,
                 child: Text(
                   widget.transaction != null
                       ? 'Atualizar transação'
                       : 'Salvar transação',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.w600),
                 ),
               ),
             ),
@@ -723,11 +741,11 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
   }
 }
 
-// ---------------------------------------------------------------------------
+// ─── Widgets auxiliares ───────────────────────────────────────────────────────
 
 class _SectionLabel extends StatelessWidget {
   final String label;
-  const _SectionLabel({required this.label});
+  const _SectionLabel(this.label);
 
   @override
   Widget build(BuildContext context) {
@@ -737,7 +755,7 @@ class _SectionLabel extends StatelessWidget {
         fontSize: 11,
         fontWeight: FontWeight.w700,
         letterSpacing: 1.2,
-        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.45),
+        color: Theme.of(context).colorScheme.onSurface.withAlpha(115),
       ),
     );
   }
@@ -760,23 +778,17 @@ class _OptionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: Theme.of(context)
-            .colorScheme
-            .surfaceContainerHighest
-            .withOpacity(0.4),
+        color: cs.surfaceContainerHighest.withAlpha(102),
         borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-        border: Border.all(
-          color: Theme.of(context).dividerColor.withOpacity(0.3),
-        ),
+        border: Border.all(color: cs.onSurface.withAlpha(77)),
       ),
       child: Row(
         children: [
-          Icon(icon,
-              size: 20,
-              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.55)),
+          Icon(icon, size: 20, color: cs.onSurface.withAlpha(140)),
           const Gap(12),
           Expanded(
             child: Column(
@@ -787,18 +799,14 @@ class _OptionTile extends StatelessWidget {
                         fontWeight: FontWeight.w500, fontSize: 14)),
                 Text(subtitle,
                     style: TextStyle(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurface
-                            .withOpacity(0.55),
-                        fontSize: 12)),
+                        color: cs.onSurface.withAlpha(140), fontSize: 12)),
               ],
             ),
           ),
           Switch(
             value: value,
             onChanged: onChanged,
-            activeThumbColor: Theme.of(context).colorScheme.primary,
+            activeThumbColor: cs.primary,
           ),
         ],
       ),
@@ -806,11 +814,12 @@ class _OptionTile extends StatelessWidget {
   }
 }
 
-class _TransactionType {
+/// Modelo imutável de tipo de transação — só dados, sem lógica de UI.
+class _TxType {
   final String value;
   final String label;
   final IconData icon;
   final Color color;
 
-  const _TransactionType(this.value, this.label, this.icon, this.color);
+  const _TxType(this.value, this.label, this.icon, this.color);
 }
