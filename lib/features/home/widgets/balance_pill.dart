@@ -64,10 +64,10 @@ class BalancePill extends StatelessWidget {
               children: [
                 Text(
                   label,
-                  style: TextStyle(
+                  style: AppTheme.metaStyle(
+                    context,
                     fontSize: 9,
                     color: onPrimary.withAlpha(153),
-                    fontWeight: FontWeight.w500,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -76,10 +76,10 @@ class BalancePill extends StatelessWidget {
                 else
                   Text(
                     'R\$ ${_compact(cents ?? 0)}',
-                    style: TextStyle(
+                    style: AppTheme.titleStyle(
+                      context,
                       fontSize: 12,
                       color: onPrimary,
-                      fontWeight: FontWeight.w700,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),

@@ -21,12 +21,13 @@ class SettingsSectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       label.toUpperCase(),
-      style: TextStyle(
+      style: AppTheme.metaStyle(
+        context,
         fontSize: 11,
         fontWeight: FontWeight.w700,
-        letterSpacing: 1.2,
-        color: Theme.of(context).colorScheme.onSurface.withAlpha(115),
-      ),
+      ).copyWith(
+          letterSpacing: 1.2,
+          color: Theme.of(context).colorScheme.onSurface.withAlpha(115)),
     );
   }
 }
@@ -96,15 +97,16 @@ class SettingsTile extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: TextStyle(
+                    style: AppTheme.actionStyle(
+                      context,
                       fontSize: 14,
-                      fontWeight: FontWeight.w600,
                       color: titleColor ?? cs.onSurface,
                     ),
                   ),
                   Text(
                     subtitle,
-                    style: TextStyle(
+                    style: AppTheme.metaStyle(
+                      context,
                       fontSize: 12,
                       color: cs.onSurface.withAlpha(127),
                     ),

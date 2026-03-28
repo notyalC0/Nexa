@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:nexa/core/theme/app_theme.dart';
 
 /// Widget genérico de "estado vazio" — usado quando uma lista não tem itens.
 ///
@@ -30,9 +31,9 @@ class AppEmptyState extends StatelessWidget {
         const Gap(12),
         Text(
           message,
-          style: TextStyle(
+          style: AppTheme.actionStyle(
+            context,
             fontSize: 14,
-            fontWeight: FontWeight.w600,
             color: cs.onSurface.withAlpha(100),
           ),
           textAlign: TextAlign.center,
@@ -41,7 +42,8 @@ class AppEmptyState extends StatelessWidget {
           const Gap(6),
           Text(
             subtitle!,
-            style: TextStyle(
+            style: AppTheme.metaStyle(
+              context,
               fontSize: 12,
               color: cs.onSurface.withAlpha(70),
             ),

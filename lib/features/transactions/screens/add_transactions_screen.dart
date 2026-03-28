@@ -4,13 +4,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
 import 'package:nexa/core/database/database_helper.dart';
+import 'package:nexa/core/models/credit_cards.dart';
 import 'package:nexa/core/theme/app_theme.dart';
 import 'package:nexa/core/utils/input_masks.dart';
 import 'package:nexa/features/cards/providers/cards_provider.dart';
+import 'package:nexa/features/cards/screens/card_screen.dart';
 import 'package:nexa/features/home/provider/balance_provider.dart';
 import 'package:nexa/features/home/provider/health_score_provider.dart';
 import 'package:nexa/features/transactions/providers/transactions_provider.dart';
 import 'package:uuid/uuid.dart';
+
 import '../../../core/models/categories.dart';
 import '../../../core/models/transactions.dart';
 
@@ -24,8 +27,7 @@ class AddTransactionsScreen extends ConsumerStatefulWidget {
       _AddTransactionsScreenState();
 }
 
-class _AddTransactionsScreenState
-    extends ConsumerState<AddTransactionsScreen> {
+class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
   // ─── Controladores ──────────────────────────────────────────────────────
   final _formKey = GlobalKey<FormState>();
   final _dateController = TextEditingController();
@@ -47,10 +49,9 @@ class _AddTransactionsScreenState
 
   // ─── Dados estáticos ────────────────────────────────────────────────────
   static const _types = [
-    _TxType('expense', 'Despesa', Icons.arrow_downward_rounded,
-        Colors.redAccent),
-    _TxType('income', 'Receita', Icons.arrow_upward_rounded,
-        Color(0xFF2ECC71)),
+    _TxType(
+        'expense', 'Despesa', Icons.arrow_downward_rounded, Colors.redAccent),
+    _TxType('income', 'Receita', Icons.arrow_upward_rounded, Color(0xFF2ECC71)),
   ];
 
   // ─── Ciclo de vida ──────────────────────────────────────────────────────
@@ -65,8 +66,7 @@ class _AddTransactionsScreenState
     final tx = widget.transaction;
     if (tx != null) {
       // Modo edição: preenche com os dados existentes
-      _amountController.text =
-          InputMasks.centsToCurrencyText(tx.amountCents);
+      _amountController.text = InputMasks.centsToCurrencyText(tx.amountCents);
       _selectedType = tx.type;
       _selectedStatus = tx.status;
       _selectedCardId = tx.creditCardsId;
@@ -127,8 +127,7 @@ class _AddTransactionsScreenState
     final safe = installments <= 0 ? 1 : installments;
     final base = totalCents ~/ safe;
     final remainder = totalCents % safe;
-    return List<int>.generate(
-        safe, (i) => base + (i < remainder ? 1 : 0),
+    return List<int>.generate(safe, (i) => base + (i < remainder ? 1 : 0),
         growable: false);
   }
 
@@ -166,15 +165,18 @@ class _AddTransactionsScreenState
     if (categoryId == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Nenhuma categoria disponível.')),
+          AppTheme.snackBar(
+            context,
+            message: 'Nenhuma categoria disponível.',
+            icon: Icons.category_outlined,
+          ),
         );
       }
       return;
     }
 
     final amount = InputMasks.currencyToCents(_amountController.text);
-    final totalParcelas =
-        int.tryParse(_installmentController.text.trim()) ?? 1;
+    final totalParcelas = int.tryParse(_installmentController.text.trim()) ?? 1;
     final parcelaAtual =
         (int.tryParse(_installmentCurrentController.text.trim()) ?? 1)
             .clamp(1, totalParcelas);
@@ -191,13 +193,12 @@ class _AddTransactionsScreenState
     // ── CASO 1: Nova transação parcelada ─────────────────────────────────
     if (widget.transaction == null && totalParcelas > 1) {
       final groupId = const Uuid().v4();
-      final baseDate =
-          DateFormat('yyyy-MM-dd').parse(_selectedDateForDb!);
+      final baseDate = DateFormat('yyyy-MM-dd').parse(_selectedDateForDb!);
       final amounts = _splitAmount(amount, totalParcelas);
 
       for (int i = 0; i < totalParcelas; i++) {
-        final parcelaDate = DateTime(
-            baseDate.year, baseDate.month + i, baseDate.day);
+        final parcelaDate =
+            DateTime(baseDate.year, baseDate.month + i, baseDate.day);
         await db.insertTransaction(Transactions(
           amountCents: amounts[i],
           type: _selectedType!,
@@ -275,9 +276,8 @@ class _AddTransactionsScreenState
         creditCardsId: _selectedCardId,
         installmentTotal: totalParcelas > 1 ? totalParcelas : null,
         installmentCurrent: totalParcelas > 1 ? parcelaAtual : null,
-        installmentGroupId: totalParcelas > 1
-            ? widget.transaction?.installmentGroupId
-            : null,
+        installmentGroupId:
+            totalParcelas > 1 ? widget.transaction?.installmentGroupId : null,
         isRecurring: _isRecurring,
         recurringId: recurringId,
         parentId: recurringParentId,
@@ -301,64 +301,221 @@ class _AddTransactionsScreenState
 
   /// Campo em largura total (com ícone)
   InputDecoration _dec(String label, {IconData? icon}) {
-    final cs = Theme.of(context).colorScheme;
-    return InputDecoration(
-      labelText: label,
-      prefixIcon: icon != null
-          ? Icon(icon, size: 18, color: cs.onSurface.withAlpha(140))
-          : null,
-      filled: true,
-      fillColor: cs.surfaceContainerHighest.withAlpha(102),
-      border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-          borderSide: BorderSide.none),
-      enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-          borderSide:
-              BorderSide(color: cs.onSurface.withAlpha(77))),
-      focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-          borderSide: BorderSide(color: cs.primary, width: 1.8)),
-      errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-          borderSide: BorderSide(color: cs.error)),
-      focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-          borderSide: BorderSide(color: cs.error, width: 1.8)),
-      labelStyle:
-          TextStyle(color: cs.onSurface.withAlpha(140), fontSize: 14),
+    return AppTheme.inputDecoration(
+      context,
+      label: label,
+      icon: icon,
     );
   }
 
   /// Campo compacto (sem ícone, para uso lado a lado)
   InputDecoration _decCompact(String label) {
-    final cs = Theme.of(context).colorScheme;
-    return InputDecoration(
-      labelText: label,
-      filled: true,
-      fillColor: cs.surfaceContainerHighest.withAlpha(102),
-      border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-          borderSide: BorderSide.none),
-      enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-          borderSide:
-              BorderSide(color: cs.onSurface.withAlpha(77))),
-      focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-          borderSide: BorderSide(color: cs.primary, width: 1.8)),
-      errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-          borderSide: BorderSide(color: cs.error)),
-      focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-          borderSide: BorderSide(color: cs.error, width: 1.8)),
-      labelStyle:
-          TextStyle(color: cs.onSurface.withAlpha(140), fontSize: 13),
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-      isDense: true,
+    return AppTheme.inputDecoration(
+      context,
+      label: label,
+      compact: true,
     );
+  }
+
+  String _statusLabel(String? value) {
+    switch (value) {
+      case 'pending':
+        return 'Pendente';
+      case 'confirmed':
+      default:
+        return 'Confirmado';
+    }
+  }
+
+  Future<void> _openStatusPicker() async {
+    final selected = await _showChoiceSheet<String>(
+      title: 'Selecionar status',
+      selectedValue: _selectedStatus ?? 'confirmed',
+      choices: const [
+        _PickerChoice(value: 'pending', label: 'Pendente'),
+        _PickerChoice(value: 'confirmed', label: 'Confirmado'),
+      ],
+    );
+    if (selected == null) return;
+    setState(() => _selectedStatus = selected);
+  }
+
+  Future<void> _openCardPicker(List<CreditCards> cards) async {
+    final selected = await _showChoiceSheet<int>(
+      title: 'Selecionar cartão',
+      selectedValue: _selectedCardId ?? -1,
+      choices: [
+        const _PickerChoice(
+          value: -1,
+          label: 'Nenhum (débito/dinheiro)',
+          icon: Icons.account_balance_wallet_outlined,
+        ),
+        ...cards.map(
+          (c) => _PickerChoice<int>(
+            value: c.id ?? -1,
+            label: c.name,
+            subtitle:
+                'Fechamento dia ${c.closingDay} • Vencimento dia ${c.dueDay}',
+            icon: Icons.credit_card_rounded,
+          ),
+        ),
+      ],
+    );
+    if (selected == null) return;
+    setState(() {
+      _selectedCardId = selected == -1 ? null : selected;
+      if (_selectedCardId == null) {
+        _installmentController.clear();
+        _installmentCurrentController.text = '1';
+      }
+    });
+  }
+
+  Future<void> _openCategoryPicker(List<Categories> categories) async {
+    final initial = categories.any((c) => c.id == _selectedCategoryId)
+        ? _selectedCategoryId
+        : categories.firstOrNull?.id;
+    final selected = await _showChoiceSheet<int>(
+      title: 'Selecionar categoria',
+      selectedValue: initial,
+      choices: categories
+          .map(
+            (c) => _PickerChoice<int>(
+              value: c.id!,
+              label: c.name,
+              icon: Icons.category_rounded,
+            ),
+          )
+          .toList(growable: false),
+    );
+    if (selected == null) return;
+    setState(() => _selectedCategoryId = selected);
+  }
+
+  Future<T?> _showChoiceSheet<T>({
+    required String title,
+    required List<_PickerChoice<T>> choices,
+    T? selectedValue,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+
+    return showModalBottomSheet<T>(
+      context: context,
+      backgroundColor: cs.surface,
+      useSafeArea: true,
+      isScrollControlled: true,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppTheme.radiusModal),
+        ),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: AppTheme.titleStyle(context, fontSize: 17),
+              ),
+              const Gap(12),
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: choices.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (_, index) {
+                    final choice = choices[index];
+                    final selected =
+                        selectedValue != null && choice.value == selectedValue;
+                    return ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 2),
+                      leading: choice.icon != null
+                          ? Icon(
+                              choice.icon,
+                              color: selected
+                                  ? cs.primary
+                                  : cs.onSurface.withAlpha(166),
+                            )
+                          : null,
+                      title: Text(
+                        choice.label,
+                        style: AppTheme.actionStyle(
+                          context,
+                          color: selected ? cs.primary : null,
+                          fontWeight:
+                              selected ? FontWeight.w700 : FontWeight.w500,
+                        ),
+                      ),
+                      subtitle: choice.subtitle == null
+                          ? null
+                          : Text(
+                              choice.subtitle!,
+                              style: AppTheme.metaStyle(context, fontSize: 12),
+                            ),
+                      trailing: selected
+                          ? Icon(Icons.check_circle_rounded, color: cs.primary)
+                          : null,
+                      onTap: () => Navigator.pop(ctx, choice.value),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _selectionField({
+    required String label,
+    required String text,
+    required VoidCallback? onTap,
+    IconData? icon,
+    Widget? suffix,
+    bool compact = false,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+      child: IgnorePointer(
+        child: TextFormField(
+          enabled: onTap != null,
+          readOnly: true,
+          style: AppTheme.inputTextStyle(context),
+          decoration:
+              (compact ? _decCompact(label) : _dec(label, icon: icon)).copyWith(
+            hintText: text,
+            hintStyle: AppTheme.subtitleStyle(
+              context,
+              fontSize: 15,
+              color: onTap == null ? cs.onSurface.withAlpha(102) : cs.onSurface,
+            ),
+            suffixIcon: suffix ??
+                Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: cs.onSurface.withAlpha(166),
+                ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _goToCardsAndRefresh() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const CardsScreen()),
+    );
+    if (!mounted) return;
+    ref.invalidate(creditCardProvider);
   }
 
   // ─── Build ───────────────────────────────────────────────────────────────
@@ -374,6 +531,8 @@ class _AddTransactionsScreenState
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: () => Navigator.pop(context),
@@ -397,8 +556,8 @@ class _AddTransactionsScreenState
             ),
             Text(
               'Preencha os dados abaixo',
-              style: TextStyle(
-                  color: cs.onSurface.withAlpha(140), fontSize: 14),
+              style:
+                  TextStyle(color: cs.onSurface.withAlpha(140), fontSize: 14),
             ),
             const Gap(28),
 
@@ -409,18 +568,29 @@ class _AddTransactionsScreenState
               controller: _amountController,
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
-              style: const TextStyle(
+              style: AppTheme.inputTextStyle(
+                context,
+                fontSize: 24,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.5,
+              ),
+              decoration: _dec('Valor').copyWith(
+                labelText: null,
+                prefixText: 'R\$ ',
+                prefixStyle: AppTheme.inputPrefixStyle(
+                  context,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                ),
+                hintText: '0,00',
+                hintStyle: AppTheme.subtitleStyle(
+                  context,
                   fontSize: 24,
                   fontWeight: FontWeight.w700,
-                  letterSpacing: -0.5),
-              decoration: _dec('0,00').copyWith(
-                prefixText: 'R\$ ',
-                prefixStyle: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                    color: cs.onSurface.withAlpha(140)),
-                contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 20),
+                  color: Theme.of(context).colorScheme.onSurface.withAlpha(60),
+                ),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
               ),
               inputFormatters: [_currencyMask],
               validator: (v) {
@@ -459,9 +629,7 @@ class _AddTransactionsScreenState
                         borderRadius:
                             BorderRadius.circular(AppTheme.radiusChip),
                         border: Border.all(
-                          color: isSelected
-                              ? type.color
-                              : Colors.transparent,
+                          color: isSelected ? type.color : Colors.transparent,
                           width: 1.5,
                         ),
                       ),
@@ -509,37 +677,26 @@ class _AddTransactionsScreenState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: DropdownButtonFormField<String>(
-                    decoration: _decCompact('Status'),
-                    borderRadius:
-                        BorderRadius.circular(AppTheme.radiusChip),
-                    isExpanded: true,
-                    value: _selectedStatus,
-                    onChanged: (v) => setState(() => _selectedStatus = v),
-                    items: const [
-                      DropdownMenuItem(
-                          value: 'pending',
-                          child: Text('Pendente',
-                              overflow: TextOverflow.ellipsis)),
-                      DropdownMenuItem(
-                          value: 'confirmed',
-                          child: Text('Confirmado',
-                              overflow: TextOverflow.ellipsis)),
-                    ],
+                  child: _selectionField(
+                    compact: true,
+                    label: 'Status',
+                    text: _statusLabel(_selectedStatus),
+                    onTap: _openStatusPicker,
                   ),
                 ),
                 const Gap(12),
                 Expanded(
                   child: TextFormField(
                     controller: _dateController,
+                    style: AppTheme.inputTextStyle(context),
+                    cursorColor: cs.primary,
                     decoration: _decCompact('Data'),
                     readOnly: true,
                     validator: (v) =>
                         (v == null || v.isEmpty) ? 'Informe a data' : null,
                     onTap: () async {
                       final initial = _selectedDateForDb != null
-                          ? DateFormat('yyyy-MM-dd')
-                              .parse(_selectedDateForDb!)
+                          ? DateFormat('yyyy-MM-dd').parse(_selectedDateForDb!)
                           : DateTime.now();
                       final picked = await showDatePicker(
                         context: context,
@@ -563,54 +720,9 @@ class _AddTransactionsScreenState
             const Gap(14),
             TextFormField(
               controller: _descriptionController,
-              decoration:
-                  _dec('Descrição', icon: Icons.edit_note_rounded),
-            ),
-            const Gap(24),
-
-            // ── Parcelamento ───────────────────────────────────────────
-            _SectionLabel('Parcelamento'),
-            const Gap(6),
-            Text(
-              'Deixe em branco ou "1" para transação única.',
-              style: TextStyle(
-                  fontSize: 12, color: cs.onSurface.withAlpha(115)),
-            ),
-            const Gap(10),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _installmentController,
-                    keyboardType: TextInputType.number,
-                    decoration: _decCompact('Nº parcelas'),
-                    // Só dígitos, máx 2 caracteres (até 99 parcelas)
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(2),
-                    ],
-                    validator: (v) {
-                      if (v == null || v.isEmpty) return null; // opcional
-                      final n = int.tryParse(v);
-                      if (n != null && n < 1) return 'Mín. 1';
-                      return null;
-                    },
-                  ),
-                ),
-                const Gap(12),
-                Expanded(
-                  child: TextFormField(
-                    controller: _installmentCurrentController,
-                    keyboardType: TextInputType.number,
-                    decoration: _decCompact('Parcela atual'),
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(2),
-                    ],
-                  ),
-                ),
-              ],
+              style: AppTheme.inputTextStyle(context),
+              cursorColor: cs.primary,
+              decoration: _dec('Descrição', icon: Icons.edit_note_rounded),
             ),
             const Gap(24),
 
@@ -620,33 +732,52 @@ class _AddTransactionsScreenState
 
             // Cartão
             cardsAsync.when(
-              loading: () => DropdownButtonFormField<int>(
-                decoration:
-                    _dec('Cartão', icon: Icons.credit_card_rounded),
-                onChanged: null,
-                items: const [],
-                hint: const Text('Carregando...'),
+              loading: () => _selectionField(
+                label: 'Cartão',
+                icon: Icons.credit_card_rounded,
+                text: 'Carregando...',
+                onTap: null,
               ),
-              error: (_, __) => DropdownButtonFormField<int>(
-                decoration:
-                    _dec('Cartão', icon: Icons.credit_card_rounded),
-                onChanged: null,
-                items: const [],
-                hint: const Text('Erro ao carregar'),
+              error: (_, __) => _selectionField(
+                label: 'Cartão',
+                icon: Icons.credit_card_rounded,
+                text: 'Erro ao carregar',
+                onTap: null,
               ),
-              data: (cards) => DropdownButtonFormField<int>(
-                decoration:
-                    _dec('Cartão', icon: Icons.credit_card_rounded),
-                value: _selectedCardId,
-                onChanged: (v) => setState(() => _selectedCardId = v),
-                hint: const Text('Nenhum (débito/dinheiro)'),
-                items: [
-                  // Opção "nenhum"
-                  const DropdownMenuItem<int>(
-                      value: null,
-                      child: Text('Nenhum (débito/dinheiro)')),
-                  ...cards.map((c) => DropdownMenuItem(
-                      value: c.id, child: Text(c.name))),
+              data: (cards) => Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: _selectionField(
+                      label: 'Cartão',
+                      icon: Icons.credit_card_rounded,
+                      text: cards
+                              .where((c) => c.id == _selectedCardId)
+                              .firstOrNull
+                              ?.name ??
+                          'Nenhum (débito/dinheiro)',
+                      onTap: () => _openCardPicker(cards),
+                    ),
+                  ),
+                  const Gap(8),
+                  SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: Material(
+                      color: cs.primary.withAlpha(25),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusChip),
+                      child: InkWell(
+                        onTap: _goToCardsAndRefresh,
+                        borderRadius:
+                            BorderRadius.circular(AppTheme.radiusChip),
+                        child: Icon(
+                          Icons.add_card_rounded,
+                          color: cs.primary,
+                          size: 22,
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -654,37 +785,107 @@ class _AddTransactionsScreenState
 
             // Categoria
             categoriesAsync.when(
-              loading: () => DropdownButtonFormField<int>(
-                decoration:
-                    _dec('Categoria', icon: Icons.category_rounded),
-                onChanged: null,
-                items: const [],
-                hint: const Text('Carregando...'),
+              loading: () => _selectionField(
+                label: 'Categoria',
+                icon: Icons.category_rounded,
+                text: 'Carregando...',
+                onTap: null,
               ),
-              error: (_, __) => DropdownButtonFormField<int>(
-                decoration:
-                    _dec('Categoria', icon: Icons.category_rounded),
-                onChanged: null,
-                items: const [],
-                hint: const Text('Erro ao carregar'),
+              error: (_, __) => _selectionField(
+                label: 'Categoria',
+                icon: Icons.category_rounded,
+                text: 'Erro ao carregar',
+                onTap: null,
               ),
               data: (categories) {
                 // Verifica se a categoria salva ainda existe
-                final selectedExists = categories
-                    .any((c) => c.id == _selectedCategoryId);
-                return DropdownButtonFormField<int>(
-                  decoration:
-                      _dec('Categoria', icon: Icons.category_rounded),
-                  value: selectedExists ? _selectedCategoryId : null,
-                  onChanged: (v) =>
-                      setState(() => _selectedCategoryId = v),
-                  hint: const Text('Selecione'),
-                  items: categories
-                      .map((c) =>
-                          DropdownMenuItem(value: c.id, child: Text(c.name)))
-                      .toList(),
+                final selectedExists =
+                    categories.any((c) => c.id == _selectedCategoryId);
+                return _selectionField(
+                  label: 'Categoria',
+                  icon: Icons.category_rounded,
+                  text: selectedExists
+                      ? categories
+                              .where((c) => c.id == _selectedCategoryId)
+                              .firstOrNull
+                              ?.name ??
+                          'Selecione'
+                      : 'Selecione',
+                  onTap: categories.isEmpty
+                      ? null
+                      : () => _openCategoryPicker(categories),
                 );
               },
+            ),
+            const Gap(24),
+
+            // ── Parcelamento (somente com cartão) ─────────────────────
+            AnimatedSize(
+              duration: const Duration(milliseconds: 260),
+              curve: Curves.easeOutCubic,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                switchInCurve: Curves.easeOut,
+                switchOutCurve: Curves.easeIn,
+                child: _selectedCardId == null
+                    ? const SizedBox.shrink(key: ValueKey('no_installments'))
+                    : Column(
+                        key: const ValueKey('with_installments'),
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _SectionLabel('Parcelamento'),
+                          const Gap(6),
+                          Text(
+                            'Deixe em branco ou "1" para transação única.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: cs.onSurface.withAlpha(115),
+                            ),
+                          ),
+                          const Gap(10),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: TextFormField(
+                                  controller: _installmentController,
+                                  keyboardType: TextInputType.number,
+                                  style: AppTheme.inputTextStyle(context),
+                                  cursorColor: cs.primary,
+                                  decoration: _decCompact('Nº parcelas'),
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                    LengthLimitingTextInputFormatter(2),
+                                  ],
+                                  validator: (v) {
+                                    if (_selectedCardId == null) return null;
+                                    if (v == null || v.isEmpty) return null;
+                                    final n = int.tryParse(v);
+                                    if (n != null && n < 1) return 'Mín. 1';
+                                    return null;
+                                  },
+                                ),
+                              ),
+                              const Gap(12),
+                              Expanded(
+                                child: TextFormField(
+                                  controller: _installmentCurrentController,
+                                  keyboardType: TextInputType.number,
+                                  style: AppTheme.inputTextStyle(context),
+                                  cursorColor: cs.primary,
+                                  decoration: _decCompact('Parcela atual'),
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                    LengthLimitingTextInputFormatter(2),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const Gap(24),
+                        ],
+                      ),
+              ),
             ),
             const Gap(24),
 
@@ -704,6 +905,8 @@ class _AddTransactionsScreenState
             TextFormField(
               controller: _noteController,
               maxLines: 3,
+              style: AppTheme.inputTextStyle(context),
+              cursorColor: cs.primary,
               decoration:
                   _dec('Nota (opcional)', icon: Icons.sticky_note_2_rounded)
                       .copyWith(alignLabelWithHint: true),
@@ -720,8 +923,7 @@ class _AddTransactionsScreenState
                   foregroundColor: cs.onPrimary,
                   elevation: 0,
                   shape: RoundedRectangleBorder(
-                    borderRadius:
-                        BorderRadius.circular(AppTheme.radiusChip),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusChip),
                   ),
                 ),
                 onPressed: _save,
@@ -795,8 +997,10 @@ class _OptionTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w500, fontSize: 14)),
+                    style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        color: cs.onSurface)),
                 Text(subtitle,
                     style: TextStyle(
                         color: cs.onSurface.withAlpha(140), fontSize: 12)),
@@ -806,7 +1010,6 @@ class _OptionTile extends StatelessWidget {
           Switch(
             value: value,
             onChanged: onChanged,
-            activeThumbColor: cs.primary,
           ),
         ],
       ),
@@ -822,4 +1025,18 @@ class _TxType {
   final Color color;
 
   const _TxType(this.value, this.label, this.icon, this.color);
+}
+
+class _PickerChoice<T> {
+  final T value;
+  final String label;
+  final String? subtitle;
+  final IconData? icon;
+
+  const _PickerChoice({
+    required this.value,
+    required this.label,
+    this.subtitle,
+    this.icon,
+  });
 }

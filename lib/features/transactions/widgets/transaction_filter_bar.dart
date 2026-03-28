@@ -65,10 +65,10 @@ class TransactionFilterBar extends StatelessWidget {
                       children: [
                         Text(
                           monthLabel,
-                          style: TextStyle(
+                          style: AppTheme.titleStyle(
+                            context,
                             fontSize: 16,
                             fontWeight: FontWeight.w800,
-                            color: cs.onSurface,
                             letterSpacing: -0.2,
                           ),
                         ),
@@ -99,12 +99,10 @@ class TransactionFilterBar extends StatelessWidget {
               itemBuilder: (context, index) {
                 final f = filters[index];
                 final isActive = selectedFilter == f.value;
-                return GestureDetector(
-                  onTap: () => onFilterChanged(f.value),
+                return ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 160),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
                       color: isActive
                           ? cs.primary
@@ -115,29 +113,41 @@ class TransactionFilterBar extends StatelessWidget {
                             isActive ? cs.primary : cs.onSurface.withAlpha(25),
                       ),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          f.icon,
-                          size: 20,
-                          color: isActive
-                              ? cs.onPrimary
-                              : cs.onSurface.withAlpha(153),
-                        ),
-                        const Gap(5),
-                        Text(
-                          f.label,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight:
-                                isActive ? FontWeight.w700 : FontWeight.w500,
-                            color: isActive
-                                ? cs.onPrimary
-                                : cs.onSurface.withAlpha(153),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => onFilterChanged(f.value),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                f.icon,
+                                size: 20,
+                                color: isActive
+                                    ? cs.onPrimary
+                                    : cs.onSurface.withAlpha(153),
+                              ),
+                              const Gap(5),
+                              Text(
+                                f.label,
+                                style: AppTheme.metaStyle(
+                                  context,
+                                  fontSize: 11,
+                                  fontWeight: isActive
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                  color: isActive
+                                      ? cs.onPrimary
+                                      : cs.onSurface.withAlpha(153),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 );
@@ -169,7 +179,8 @@ class _FutureMonthBadge extends StatelessWidget {
       ),
       child: Text(
         'Projetado',
-        style: TextStyle(
+        style: AppTheme.metaStyle(
+          context,
           fontSize: 11,
           fontWeight: FontWeight.w700,
           color: Colors.amber.shade700,
@@ -198,7 +209,7 @@ class _MonthArrowButton extends StatelessWidget {
           color: cs.surfaceContainerHighest.withAlpha(127),
           borderRadius: BorderRadius.circular(AppTheme.radiusChip),
         ),
-        child: Icon(icon, size: 40, color: cs.onSurface.withAlpha(178)),
+        child: Icon(icon, size: 22, color: cs.onSurface.withAlpha(178)),
       ),
     );
   }

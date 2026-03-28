@@ -38,7 +38,8 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
     if (k.contains('nubank')) return const Color(0xFF8B5CF6);
     if (k.contains('inter')) return const Color(0xFFFF6B00);
     if (k.contains('bradesco')) return const Color(0xFFCC0000);
-    if (k.contains('itau') || k.contains('itaú')) return const Color(0xFFFF6600);
+    if (k.contains('itau') || k.contains('itaú'))
+      return const Color(0xFFFF6600);
     if (k.contains('santander')) return const Color(0xFFEC0000);
     if (k.contains('c6')) return const Color(0xFF1A1A2E);
     if (k.contains('xp')) return const Color(0xFF000000);
@@ -59,8 +60,7 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
     final colorScheme = Theme.of(context).colorScheme;
 
     // Controladores inicializados com valores existentes (se edição)
-    final nameController =
-        TextEditingController(text: existing?.name ?? '');
+    final nameController = TextEditingController(text: existing?.name ?? '');
     final limitController = TextEditingController(
       text: existing != null
           ? InputMasks.centsToCurrencyText(existing.totalLimitCents)
@@ -68,8 +68,8 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
     );
     final bankController =
         TextEditingController(text: existing?.bankKeyword ?? '');
-    final closingController = TextEditingController(
-        text: existing?.closingDay.toString() ?? '');
+    final closingController =
+        TextEditingController(text: existing?.closingDay.toString() ?? '');
     final dueController =
         TextEditingController(text: existing?.dueDay.toString() ?? '');
 
@@ -81,8 +81,8 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
       isScrollControlled: true,
       backgroundColor: colorScheme.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-            top: Radius.circular(AppTheme.radiusModal)),
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppTheme.radiusModal)),
       ),
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(
@@ -101,19 +101,18 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
                 _SheetHandle(),
                 Text(
                   isEdit ? 'Editar cartão' : 'Adicionar cartão',
-                  style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: colorScheme.onSurface),
+                  style: AppTheme.titleStyle(context, fontSize: 18),
                 ),
                 const Gap(4),
                 Text(
                   isEdit
                       ? 'Altere os dados do cartão'
                       : 'Preencha os dados do cartão',
-                  style: TextStyle(
-                      fontSize: 13,
-                      color: colorScheme.onSurface.withAlpha(140)),
+                  style: AppTheme.subtitleStyle(
+                    context,
+                    fontSize: 13,
+                    color: colorScheme.onSurface.withAlpha(140),
+                  ),
                 ),
                 const Gap(20),
 
@@ -132,17 +131,20 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
                   controller: bankController,
                   label: 'Banco (ex: nubank, itau)',
                   icon: Icons.account_balance_rounded,
-                  validator: (v) =>
-                      (v == null || v.trim().isEmpty) ? 'Informe o banco' : null,
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Informe o banco'
+                      : null,
                 ),
                 const Gap(12),
 
                 // Limite
                 _SheetField(
                   controller: limitController,
-                  label: 'Limite (R\$)',
-                  icon: Icons.attach_money_rounded,
-                  keyboardType: TextInputType.number,
+                  label: 'Limite',
+                  icon: Icons.payments_rounded,
+                  prefixText: 'R\$ ',
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
                   inputFormatters: [limitMask],
                   validator: (v) {
                     if (v == null || v.isEmpty) return 'Informe o limite';
@@ -212,14 +214,13 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
 
                       if (isEdit) {
                         final updated = CreditCards(
-                          id: existing!.id,
+                          id: existing.id,
                           name: nameController.text.trim(),
                           totalLimitCents: limitValue,
                           closingDay: closingDay,
                           dueDay: dueDay,
                           colorHex: existing.colorHex,
-                          bankKeyword:
-                              bankController.text.trim().toLowerCase(),
+                          bankKeyword: bankController.text.trim().toLowerCase(),
                         );
                         await DatabaseHelper.instance
                             .updateCreditCards(updated);
@@ -229,8 +230,7 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
                           totalLimitCents: limitValue,
                           closingDay: closingDay,
                           dueDay: dueDay,
-                          bankKeyword:
-                              bankController.text.trim().toLowerCase(),
+                          bankKeyword: bankController.text.trim().toLowerCase(),
                         );
                         await DatabaseHelper.instance
                             .insertCreditCards(newCard);
@@ -241,8 +241,7 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
                     },
                     child: Text(
                       isEdit ? 'Salvar alterações' : 'Adicionar cartão',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w600, fontSize: 15),
+                      style: AppTheme.actionStyle(context, fontSize: 15),
                     ),
                   ),
                 ),
@@ -287,19 +286,18 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
           Expanded(
             child: Text(
               'Remover cartão',
-              style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: colorScheme.onSurface),
+              style: AppTheme.titleStyle(context, fontSize: 16),
             ),
           ),
         ]),
         content: Text(
           'Tem certeza que deseja remover o cartão "${card.name}"?\n\nAs transações vinculadas a ele não serão excluídas.',
-          style: TextStyle(
-              fontSize: 14,
-              color: colorScheme.onSurface.withAlpha(178),
-              height: 1.4),
+          style: AppTheme.subtitleStyle(
+            context,
+            fontSize: 14,
+            color: colorScheme.onSurface.withAlpha(178),
+            height: 1.4,
+          ),
         ),
         actionsPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -344,44 +342,40 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
       appBar: AppBar(
         backgroundColor: colorScheme.surface,
         elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
         centerTitle: false,
         title: Text(
           'Meus Cartões',
-          style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-              color: colorScheme.onSurface),
+          style: AppTheme.titleStyle(context, fontSize: 20),
         ),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: TextButton.icon(
               onPressed: () => _showCardSheet(),
-              icon: Icon(Icons.add_rounded,
-                  size: 18, color: colorScheme.primary),
+              icon:
+                  Icon(Icons.add_rounded, size: 18, color: colorScheme.primary),
               label: Text(
                 'Adicionar',
-                style: TextStyle(
-                    color: colorScheme.primary,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13),
+                style: AppTheme.actionStyle(
+                  context,
+                  fontSize: 13,
+                  color: colorScheme.primary,
+                ),
               ),
             ),
           ),
         ],
       ),
       body: cardsAsync.when(
-        loading: () =>
-            const Center(child: CircularProgressIndicator()),
+        loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erro: $e')),
         data: (cards) => cards.isEmpty
             ? _buildEmpty(colorScheme)
             : ListView(
                 padding: const EdgeInsets.fromLTRB(
-                    AppTheme.paddingScreen,
-                    8,
-                    AppTheme.paddingScreen,
-                    100),
+                    AppTheme.paddingScreen, 8, AppTheme.paddingScreen, 100),
                 children: [
                   // Cartões visuais
                   for (final card in cards)
@@ -399,18 +393,18 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
                   const Gap(8),
                   Text(
                     'RESUMO',
-                    style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1.2,
-                        color: colorScheme.onSurface.withAlpha(115)),
+                    style: AppTheme.metaStyle(
+                      context,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: colorScheme.onSurface.withAlpha(115),
+                    ).copyWith(letterSpacing: 1.2),
                   ),
                   const Gap(10),
 
                   // Tiles de resumo
                   for (final card in cards)
-                    _CardSummaryTile(
-                        card: card, baseColor: _cardColor(card)),
+                    _CardSummaryTile(card: card, baseColor: _cardColor(card)),
                 ],
               ),
       ),
@@ -429,40 +423,41 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
               shape: BoxShape.circle,
             ),
             child: Icon(Icons.credit_card_rounded,
-                size: 48,
-                color: colorScheme.primary.withAlpha(127)),
+                size: 48, color: colorScheme.primary.withAlpha(127)),
           ),
           const Gap(16),
           Text(
             'Nenhum cartão cadastrado',
-            style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: colorScheme.onSurface),
+            style: AppTheme.actionStyle(context, fontSize: 16),
           ),
           const Gap(6),
           Text(
             'Adicione um cartão para rastrear seus gastos',
             textAlign: TextAlign.center,
-            style: TextStyle(
-                fontSize: 13,
-                color: colorScheme.onSurface.withAlpha(127)),
+            style: AppTheme.metaStyle(
+              context,
+              fontSize: 13,
+              color: colorScheme.onSurface.withAlpha(127),
+            ),
           ),
           const Gap(24),
           ElevatedButton.icon(
             onPressed: () => _showCardSheet(),
             icon: const Icon(Icons.add_rounded, size: 18),
-            label: const Text('Adicionar cartão',
-                style: TextStyle(fontWeight: FontWeight.w600)),
+            label: Text(
+              'Adicionar cartão',
+              style: AppTheme.actionStyle(
+                context,
+                color: colorScheme.onPrimary,
+              ),
+            ),
             style: ElevatedButton.styleFrom(
               backgroundColor: colorScheme.primary,
               foregroundColor: colorScheme.onPrimary,
               elevation: 0,
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 24, vertical: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
               shape: RoundedRectangleBorder(
-                  borderRadius:
-                      BorderRadius.circular(AppTheme.radiusChip)),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusChip)),
             ),
           ),
         ],
@@ -552,10 +547,11 @@ class _CreditCardWidget extends ConsumerWidget {
                     Expanded(
                       child: Text(
                         card.name,
-                        style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white),
+                        style: AppTheme.titleStyle(
+                          context,
+                          fontSize: 16,
+                          color: Colors.white,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -577,11 +573,12 @@ class _CreditCardWidget extends ConsumerWidget {
                 // Banco
                 Text(
                   card.bankKeyword.toUpperCase(),
-                  style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.white.withAlpha(140),
-                      letterSpacing: 1.5,
-                      fontWeight: FontWeight.w600),
+                  style: AppTheme.metaStyle(
+                    context,
+                    fontSize: 11,
+                    color: Colors.white.withAlpha(140),
+                    fontWeight: FontWeight.w600,
+                  ).copyWith(letterSpacing: 1.5),
                 ),
                 const Gap(6),
 
@@ -591,12 +588,14 @@ class _CreditCardWidget extends ConsumerWidget {
                     minHeight: 6,
                     value: null,
                     backgroundColor: Colors.white24,
-                    valueColor:
-                        AlwaysStoppedAnimation<Color>(Colors.white),
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                   ),
                   error: (_, __) => Text(
                     'Limite indisponível',
-                    style: TextStyle(color: Colors.white.withAlpha(204)),
+                    style: AppTheme.metaStyle(
+                      context,
+                      color: Colors.white.withAlpha(204),
+                    ),
                   ),
                   data: (details) {
                     final percent =
@@ -606,9 +605,11 @@ class _CreditCardWidget extends ConsumerWidget {
                       children: [
                         Text(
                           'Limite Total: ${CurrencyFormatter.format(details.dynamicLimitCents)}',
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700),
+                          style: AppTheme.titleStyle(
+                            context,
+                            fontSize: 14,
+                            color: Colors.white,
+                          ),
                         ),
                         const Gap(6),
                         ClipRRect(
@@ -617,36 +618,41 @@ class _CreditCardWidget extends ConsumerWidget {
                             minHeight: 7,
                             value: details.usedPercent,
                             backgroundColor: Colors.white24,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.white),
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
                           ),
                         ),
                         const Gap(8),
                         Row(
-                          mainAxisAlignment:
-                              MainAxisAlignment.spaceBetween,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
                               'Disponível: ${CurrencyFormatter.format(details.availableCents)}',
-                              style: TextStyle(
-                                  color: Colors.white.withAlpha(230),
-                                  fontSize: 12),
+                              style: AppTheme.metaStyle(
+                                context,
+                                fontSize: 12,
+                                color: Colors.white.withAlpha(230),
+                              ),
                             ),
                             Text(
                               '$percent% utilizado',
-                              style: TextStyle(
-                                  color: Colors.white.withAlpha(217),
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600),
+                              style: AppTheme.metaStyle(
+                                context,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white.withAlpha(217),
+                              ),
                             ),
                           ],
                         ),
                         const Gap(4),
                         Text(
                           'Usado: ${CurrencyFormatter.format(details.usedCents)}',
-                          style: TextStyle(
-                              color: Colors.white.withAlpha(230),
-                              fontSize: 12),
+                          style: AppTheme.metaStyle(
+                            context,
+                            fontSize: 12,
+                            color: Colors.white.withAlpha(230),
+                          ),
                         ),
                       ],
                     );
@@ -719,10 +725,11 @@ class _CardInfoPill extends StatelessWidget {
           const SizedBox(width: 4),
           Text(
             label,
-            style: TextStyle(
-                fontSize: 11,
-                color: Colors.white.withAlpha(230),
-                fontWeight: FontWeight.w500),
+            style: AppTheme.metaStyle(
+              context,
+              fontSize: 11,
+              color: Colors.white.withAlpha(230),
+            ),
           ),
         ],
       ),
@@ -752,8 +759,7 @@ class _CardSummaryTile extends ConsumerWidget {
       decoration: BoxDecoration(
         color: colorScheme.surface,
         borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-        border:
-            Border.all(color: colorScheme.onSurface.withAlpha(20)),
+        border: Border.all(color: colorScheme.onSurface.withAlpha(20)),
       ),
       child: Row(
         children: [
@@ -764,14 +770,12 @@ class _CardSummaryTile extends ConsumerWidget {
               color: baseColor.withAlpha(31),
               borderRadius: BorderRadius.circular(AppTheme.radiusChip),
             ),
-            child: Icon(Icons.credit_card_rounded,
-                color: baseColor, size: 18),
+            child: Icon(Icons.credit_card_rounded, color: baseColor, size: 18),
           ),
           const Gap(12),
           Expanded(
             child: detailsAsync.when(
-              loading: () =>
-                  const LinearProgressIndicator(minHeight: 4),
+              loading: () => const LinearProgressIndicator(minHeight: 4),
               error: (_, __) => Text(card.name),
               data: (details) => Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -782,19 +786,13 @@ class _CardSummaryTile extends ConsumerWidget {
                       Expanded(
                         child: Text(
                           card.name,
-                          style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: colorScheme.onSurface),
+                          style: AppTheme.actionStyle(context, fontSize: 14),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       Text(
                         '${(details.usedPercent * 100).toStringAsFixed(0)}%',
-                        style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: colorScheme.onSurface),
+                        style: AppTheme.titleStyle(context, fontSize: 14),
                       ),
                     ],
                   ),
@@ -802,9 +800,11 @@ class _CardSummaryTile extends ConsumerWidget {
                   Text(
                     'Disponível: ${CurrencyFormatter.format(details.availableCents)}'
                     '   Usado: ${CurrencyFormatter.format(details.usedCents)}',
-                    style: TextStyle(
-                        fontSize: 12,
-                        color: colorScheme.onSurface.withAlpha(140)),
+                    style: AppTheme.metaStyle(
+                      context,
+                      fontSize: 12,
+                      color: colorScheme.onSurface.withAlpha(140),
+                    ),
                   ),
                 ],
               ),
@@ -842,6 +842,7 @@ class _SheetField extends StatelessWidget {
   final TextEditingController controller;
   final String label;
   final IconData icon;
+  final String? prefixText;
   final TextInputType keyboardType;
   final List<TextInputFormatter>? inputFormatters;
   final String? Function(String?)? validator;
@@ -850,6 +851,7 @@ class _SheetField extends StatelessWidget {
     required this.controller,
     required this.label,
     required this.icon,
+    this.prefixText,
     this.keyboardType = TextInputType.text,
     this.inputFormatters,
     this.validator,
@@ -863,39 +865,13 @@ class _SheetField extends StatelessWidget {
       keyboardType: keyboardType,
       inputFormatters: inputFormatters,
       validator: validator,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon,
-            size: 18,
-            color: colorScheme.onSurface.withAlpha(127)),
-        filled: true,
-        fillColor:
-            colorScheme.surfaceContainerHighest.withAlpha(102),
-        labelStyle: TextStyle(
-            color: colorScheme.onSurface.withAlpha(140), fontSize: 14),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-          borderSide:
-              BorderSide(color: colorScheme.onSurface.withAlpha(31)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-          borderSide:
-              BorderSide(color: colorScheme.primary, width: 1.8),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-          borderSide: BorderSide(color: colorScheme.error),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-          borderSide:
-              BorderSide(color: colorScheme.error, width: 1.8),
-        ),
+      style: AppTheme.inputTextStyle(context),
+      cursorColor: colorScheme.primary,
+      decoration: AppTheme.inputDecoration(
+        context,
+        label: label,
+        icon: icon,
+        prefixText: prefixText,
       ),
     );
   }

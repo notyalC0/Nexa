@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import 'package:nexa/core/database/database_helper.dart';
 import 'package:nexa/core/models/categories.dart';
+import 'package:nexa/core/notifications/notification_service.dart';
 import 'package:nexa/core/theme/app_theme.dart';
 import 'package:nexa/core/utils/currency_formatter.dart';
 import 'package:nexa/core/utils/input_masks.dart';
@@ -16,6 +17,20 @@ import 'package:nexa/features/transactions/providers/transactions_provider.dart'
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
+  Widget _sheetHandle(ColorScheme cs) {
+    return Center(
+      child: Container(
+        width: 40,
+        height: 4,
+        margin: const EdgeInsets.only(bottom: 16),
+        decoration: BoxDecoration(
+          color: cs.onSurface.withAlpha(38),
+          borderRadius: BorderRadius.circular(999),
+        ),
+      ),
+    );
+  }
+
   // ─── Dialogs e Sheets ────────────────────────────────────────────────────
 
   void _showAboutDialog(BuildContext context) {
@@ -23,49 +38,120 @@ class SettingsScreen extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppTheme.radiusModal)),
-        backgroundColor: cs.surface,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+        contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+        actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
         content: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: cs.primary,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Icon(Icons.account_balance_wallet_rounded,
-                  color: cs.onPrimary, size: 32),
+            Row(
+              children: [
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [cs.primary, cs.primary.withAlpha(204)],
+                    ),
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: [
+                      BoxShadow(
+                        color: cs.primary.withAlpha(51),
+                        blurRadius: 18,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: Icon(Icons.account_balance_wallet_rounded,
+                      color: cs.onPrimary, size: 32),
+                ),
+                const Gap(16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Nexa',
+                          style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                              color: cs.onSurface)),
+                      const Gap(6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: cs.primary.withAlpha(20),
+                          borderRadius:
+                              BorderRadius.circular(AppTheme.radiusChip),
+                          border: Border.all(color: cs.primary.withAlpha(38)),
+                        ),
+                        child: Text(
+                          'Versão 1.1.0',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: cs.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            const Gap(16),
-            Text('Nexa',
-                style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    color: cs.onSurface)),
-            const Gap(4),
-            Text('Versão 1.0.0',
-                style: TextStyle(
-                    fontSize: 13, color: cs.onSurface.withAlpha(127))),
-            const Gap(12),
-            Text(
-              'Controle financeiro pessoal simples e eficiente.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                  fontSize: 13,
-                  color: cs.onSurface.withAlpha(166),
-                  height: 1.4),
+            const Gap(20),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest.withAlpha(90),
+                borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+                border: Border.all(color: cs.onSurface.withAlpha(20)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Controle financeiro pessoal simples e eficiente.',
+                    style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: cs.onSurface,
+                        height: 1.4),
+                  ),
+                  const Gap(8),
+                  Text(
+                    'Organize cartões, acompanhe transações e acompanhe sua saúde financeira em um fluxo rápido e consistente.',
+                    style: TextStyle(
+                        fontSize: 13,
+                        color: cs.onSurface.withAlpha(166),
+                        height: 1.5),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('Fechar',
-                style:
-                    TextStyle(fontWeight: FontWeight.w600, color: cs.primary)),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: cs.primary,
+                foregroundColor: cs.onPrimary,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusChip),
+                ),
+              ),
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Fechar',
+                  style: TextStyle(fontWeight: FontWeight.w700)),
+            ),
           ),
         ],
       ),
@@ -81,20 +167,19 @@ class SettingsScreen extends ConsumerWidget {
     WidgetRef ref,
     String key,
     String title,
+    int initialCents,
   ) {
     final cs = Theme.of(context).colorScheme;
-    final controller = TextEditingController();
+    final controller = TextEditingController(
+      text:
+          initialCents > 0 ? InputMasks.centsToCurrencyText(initialCents) : '',
+    );
     final currencyMask = InputMasks.currency();
     final formKey = GlobalKey<FormState>();
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: cs.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(AppTheme.radiusModal)),
-      ),
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(
           left: AppTheme.paddingScreen,
@@ -104,107 +189,88 @@ class SettingsScreen extends ConsumerWidget {
         ),
         child: Form(
           key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Handle
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: cs.onSurface.withAlpha(38),
-                    borderRadius: BorderRadius.circular(2),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _sheetHandle(cs),
+                Text(
+                  title,
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurface),
+                ),
+                const Gap(6),
+                Text(
+                  'Digite um valor',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: cs.onSurface.withAlpha(153),
+                    height: 1.45,
                   ),
                 ),
-              ),
-              Text(
-                title,
-                style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: cs.onSurface),
-              ),
-              const Gap(16),
-              TextFormField(
-                controller: controller,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [currencyMask],
-                autofocus: true,
-                decoration: InputDecoration(
-                  prefixText: 'R\$ ',
-                  labelText: 'Valor',
-                  filled: true,
-                  fillColor: cs.surfaceContainerHighest.withAlpha(102),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-                    borderSide: BorderSide.none,
+                const Gap(16),
+                TextFormField(
+                  controller: controller,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [currencyMask],
+                  autofocus: true,
+                  style: AppTheme.inputTextStyle(
+                    context,
+                    fontWeight: FontWeight.w600,
                   ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-                    borderSide: BorderSide(color: cs.onSurface.withAlpha(51)),
+                  cursorColor: cs.primary,
+                  decoration: AppTheme.inputDecoration(
+                    context,
+                    label: 'Valor',
+                    prefixText: 'R\$ ',
                   ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-                    borderSide: BorderSide(color: cs.primary, width: 1.8),
-                  ),
-                  errorBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-                    borderSide: BorderSide(color: cs.error),
-                  ),
-                  focusedErrorBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-                    borderSide: BorderSide(color: cs.error, width: 1.8),
-                  ),
-                ),
-                validator: (v) {
-                  if (v == null || v.isEmpty) return 'Informe um valor';
-                  if (InputMasks.currencyToCents(v) <= 0) {
-                    return 'O valor deve ser maior que zero';
-                  }
-                  return null;
-                },
-              ),
-              const Gap(16),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: cs.primary,
-                    foregroundColor: cs.onPrimary,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.circular(AppTheme.radiusChip)),
-                  ),
-                  onPressed: () async {
-                    if (!formKey.currentState!.validate()) return;
-                    final cents = InputMasks.currencyToCents(controller.text);
-                    await ref
-                        .read(appSettingsProvider.notifier)
-                        .saveMoneySetting(key, cents);
-                    ref.invalidate(healthScoreProvider);
-                    if (ctx.mounted) Navigator.pop(ctx);
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'Informe um valor';
+                    if (InputMasks.currencyToCents(v) <= 0) {
+                      return 'O valor deve ser maior que zero';
+                    }
+                    return null;
                   },
-                  child: const Text('Salvar',
-                      style:
-                          TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
                 ),
-              ),
-            ],
+                const Gap(16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: cs.primary,
+                      foregroundColor: cs.onPrimary,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppTheme.radiusChip)),
+                    ),
+                    onPressed: () async {
+                      if (!formKey.currentState!.validate()) return;
+                      final cents = InputMasks.currencyToCents(controller.text);
+                      await ref
+                          .read(appSettingsProvider.notifier)
+                          .saveMoneySetting(key, cents);
+                      ref.invalidate(healthScoreProvider);
+                      if (ctx.mounted) Navigator.pop(ctx);
+                    },
+                    child: const Text('Salvar',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w600, fontSize: 15)),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  /// Dialog para adicionar nova categoria personalizada.
-  ///
-  /// CORREÇÃO: trim() no nome para evitar categorias " " (espaço em branco).
   Future<void> _showManageCategoriesDialog(
     BuildContext context,
     WidgetRef ref,
@@ -216,21 +282,54 @@ class SettingsScreen extends ConsumerWidget {
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppTheme.radiusModal)),
-        backgroundColor: cs.surface,
-        title: Text('Nova categoria',
-            style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: cs.onSurface)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+        contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+        actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: cs.primary.withAlpha(20),
+                borderRadius: BorderRadius.circular(AppTheme.radiusChip),
+              ),
+              child: Icon(Icons.category_rounded, color: cs.primary, size: 20),
+            ),
+            const Gap(12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Nova categoria',
+                      style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: cs.onSurface)),
+                  const Gap(2),
+                  Text(
+                    'Crie uma categoria personalizada para suas transações.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: cs.onSurface.withAlpha(153),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
         content: Form(
           key: formKey,
           child: TextFormField(
             controller: controller,
             textCapitalization: TextCapitalization.sentences,
             autofocus: true,
-            decoration: const InputDecoration(labelText: 'Nome da categoria'),
+            style: AppTheme.inputTextStyle(context),
+            cursorColor: cs.primary,
+            decoration: AppTheme.inputDecoration(
+              context,
+              label: 'Nome da categoria',
+            ),
             validator: (v) {
               if (v == null || v.trim().isEmpty) {
                 return 'Informe o nome da categoria';
@@ -244,6 +343,9 @@ class SettingsScreen extends ConsumerWidget {
         ),
         actions: [
           TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: cs.onSurface.withAlpha(178),
+            ),
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Cancelar'),
           ),
@@ -268,7 +370,11 @@ class SettingsScreen extends ConsumerWidget {
                 if (ctx.mounted) Navigator.pop(ctx);
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('A categoria "$name" já existe.')),
+                    AppTheme.snackBar(
+                      context,
+                      message: 'A categoria "$name" já existe.',
+                      icon: Icons.info_outline_rounded,
+                    ),
                   );
                 }
                 return;
@@ -287,9 +393,16 @@ class SettingsScreen extends ConsumerWidget {
               if (ctx.mounted) Navigator.pop(ctx);
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                      content:
-                          Text('Categoria "$name" adicionada com sucesso!')),
+                  AppTheme.snackBar(
+                    context,
+                    message: 'Categoria "$name" adicionada com sucesso!',
+                    icon: Icons.check_circle_outline_rounded,
+                    backgroundColor:
+                        Theme.of(context).brightness == Brightness.dark
+                            ? const Color(0xFF133223)
+                            : const Color(0xFF166534),
+                    foregroundColor: Colors.white,
+                  ),
                 );
               }
             },
@@ -371,6 +484,38 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
+  // ─── Time Picker para horário do lembrete ────────────────────────────────
+
+  Future<void> _showTimePicker(
+    BuildContext context,
+    WidgetRef ref,
+    AppSettingsState settings,
+  ) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(
+        hour: settings.reminderHour,
+        minute: settings.reminderMinute,
+      ),
+      builder: (ctx, child) => MediaQuery(
+        data: MediaQuery.of(ctx).copyWith(alwaysUse24HourFormat: true),
+        child: child!,
+      ),
+    );
+
+    if (picked == null) return;
+
+    // Salva e reagenda
+    await ref
+        .read(appSettingsProvider.notifier)
+        .saveReminderTime(picked.hour, picked.minute);
+
+    await NotificationService.instance.scheduleDailyReminder(
+      hour: picked.hour,
+      minute: picked.minute,
+    );
+  }
+
   // ─── Build ────────────────────────────────────────────────────────────────
 
   @override
@@ -387,6 +532,8 @@ class SettingsScreen extends ConsumerWidget {
         appBar: AppBar(
           backgroundColor: cs.surface,
           elevation: 0,
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
           centerTitle: false,
           title: Text(
             'Configurações',
@@ -414,7 +561,12 @@ class SettingsScreen extends ConsumerWidget {
               trailing: Icon(Icons.chevron_right_rounded,
                   color: cs.onSurface.withAlpha(89)),
               onTap: () => _showFinancialSheet(
-                  context, ref, 'monthly_salary_cents', 'Salário mensal'),
+                context,
+                ref,
+                'monthly_salary_cents',
+                'Salário mensal',
+                settings.salaryCents,
+              ),
             ),
             SettingsTile(
               icon: Icons.savings_rounded,
@@ -425,7 +577,12 @@ class SettingsScreen extends ConsumerWidget {
               trailing: Icon(Icons.chevron_right_rounded,
                   color: cs.onSurface.withAlpha(89)),
               onTap: () => _showFinancialSheet(
-                  context, ref, 'emergency_goal_cents', 'Meta da reserva'),
+                context,
+                ref,
+                'emergency_goal_cents',
+                'Meta da reserva',
+                settings.emergencyGoalCents,
+              ),
             ),
             SettingsTile(
               icon: Icons.savings_outlined,
@@ -436,7 +593,12 @@ class SettingsScreen extends ConsumerWidget {
               trailing: Icon(Icons.chevron_right_rounded,
                   color: cs.onSurface.withAlpha(89)),
               onTap: () => _showFinancialSheet(
-                  context, ref, 'emergency_current_cents', 'Reserva atual'),
+                context,
+                ref,
+                'emergency_current_cents',
+                'Reserva atual',
+                settings.emergencyCurrentCents,
+              ),
             ),
             const Gap(24),
 
@@ -452,7 +614,6 @@ class SettingsScreen extends ConsumerWidget {
                 onChanged: (v) => ref
                     .read(appSettingsProvider.notifier)
                     .saveBoolSetting('dark_mode', v),
-                activeThumbColor: cs.primary,
               ),
             ),
             const Gap(24),
@@ -463,15 +624,49 @@ class SettingsScreen extends ConsumerWidget {
             SettingsTile(
               icon: Icons.notifications_rounded,
               title: 'Notificações',
-              subtitle: 'Alertas de transações e vencimentos',
+              subtitle: 'Alertas diários para registrar seus gastos',
               trailing: Switch(
                 value: settings.notificationsEnabled,
-                onChanged: (v) => ref
-                    .read(appSettingsProvider.notifier)
-                    .saveBoolSetting('notifications_enabled', v),
-                activeThumbColor: cs.primary,
+                onChanged: (v) async {
+                  await ref
+                      .read(appSettingsProvider.notifier)
+                      .saveBoolSetting('notifications_enabled', v);
+                  if (v) {
+                    final granted =
+                        await NotificationService.instance.requestPermissions();
+                    if (granted) {
+                      await NotificationService.instance.scheduleDailyReminder(
+                        hour: settings.reminderHour,
+                        minute: settings.reminderMinute,
+                      );
+                    } else if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        AppTheme.snackBar(
+                          context,
+                          message:
+                              'Permissão negada. Habilite nas configurações do sistema.',
+                          icon: Icons.notifications_off_rounded,
+                        ),
+                      );
+                    }
+                  } else {
+                    await NotificationService.instance.cancelDailyReminder();
+                  }
+                },
               ),
             ),
+            if (settings.notificationsEnabled) ...[
+              const Gap(2),
+              SettingsTile(
+                icon: Icons.access_time_rounded,
+                title: 'Horário do lembrete',
+                subtitle:
+                    'Diariamente às ${settings.reminderHour.toString().padLeft(2, '0')}:${settings.reminderMinute.toString().padLeft(2, '0')}',
+                trailing: Icon(Icons.chevron_right_rounded,
+                    color: cs.onSurface.withAlpha(89)),
+                onTap: () => _showTimePicker(context, ref, settings),
+              ),
+            ],
             const Gap(24),
 
             // ── Categorias ────────────────────────────────────────────
@@ -508,7 +703,7 @@ class SettingsScreen extends ConsumerWidget {
             SettingsTile(
               icon: Icons.info_outline_rounded,
               title: 'Sobre o Nexa',
-              subtitle: 'Versão 1.0.0',
+              subtitle: 'Versão 1.1.0',
               trailing: Icon(Icons.chevron_right_rounded,
                   color: cs.onSurface.withAlpha(89)),
               onTap: () => _showAboutDialog(context),

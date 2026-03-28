@@ -2,16 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
+import 'package:nexa/core/database/database_helper.dart';
 import 'package:nexa/core/theme/app_theme.dart';
 import 'package:nexa/core/utils/currency_formatter.dart';
+import 'package:nexa/core/widgets/app_shimmer.dart';
+import 'package:nexa/features/cards/providers/cards_provider.dart';
 import 'package:nexa/features/cards/screens/card_screen.dart';
 import 'package:nexa/features/home/provider/balance_provider.dart';
 import 'package:nexa/features/home/provider/health_score_provider.dart';
-import 'package:nexa/core/widgets/app_shimmer.dart';
 import 'package:nexa/features/home/widgets/balance_pill.dart';
 import 'package:nexa/features/home/widgets/health_score_card.dart';
 import 'package:nexa/features/settings/providers/app_settings_provider.dart';
 import 'package:nexa/features/settings/screens/settings_screen.dart';
+import 'package:nexa/features/transactions/providers/transactions_provider.dart';
+import 'package:nexa/features/transactions/providers/transactions_selection_provider.dart';
 import 'package:nexa/features/transactions/screens/add_transactions_screen.dart';
 import 'package:nexa/features/transactions/screens/transactions_screen.dart';
 
@@ -61,20 +65,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
 // ─── _HomePage ────────────────────────────────────────────────────────────────
 
-/// Aba principal: header com saldo + health score + lista de transações.
-///
-/// IMPORTANTE: TransactionFilterBarSliver é inserido DIRETAMENTE no
-/// CustomScrollView, fora do SliverMainAxisGroup que vive dentro de
-/// TransactionsListPage. Isso evita o erro:
-///   "SliverGeometry: layoutExtent exceeds paintExtent"
-/// que ocorre quando um SliverPersistentHeader(pinned: true) fica dentro de
-/// um SliverMainAxisGroup — o grupo limita o espaço de pintura dos filhos.
 class _HomePage extends ConsumerWidget {
   const _HomePage();
+
+  static const _selectionTransitionDuration = Duration(milliseconds: 280);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colorScheme = Theme.of(context).colorScheme;
+    // select: só rebuilda _HomePage quando muda de sem-seleção para com-seleção
+    // (não em cada toggle individual de item)
+    final selectionMode = ref.watch(
+      selectedTransactionIdsProvider.select((ids) => ids.isNotEmpty),
+    );
     final balanceAsync = ref.watch(balanceProvider);
     final hideBalance = ref.watch(appSettingsProvider).maybeWhen(
           data: (s) => s.hideBalance,
@@ -83,21 +86,41 @@ class _HomePage extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const AddTransactionsScreen()),
-        ),
-        backgroundColor: colorScheme.primary,
-        foregroundColor: colorScheme.onPrimary,
-        elevation: 2,
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Nova transação',
-            style: TextStyle(fontWeight: FontWeight.w600)),
+      floatingActionButton: AnimatedSwitcher(
+        duration: _selectionTransitionDuration,
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        transitionBuilder: (child, animation) {
+          return FadeTransition(
+            opacity: animation,
+            child: ScaleTransition(
+              scale: Tween<double>(begin: 0.92, end: 1).animate(animation),
+              child: child,
+            ),
+          );
+        },
+        child: selectionMode
+            ? const SizedBox.shrink(key: ValueKey('fab_hidden'))
+            : FloatingActionButton.extended(
+                key: const ValueKey('fab_visible'),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const AddTransactionsScreen()),
+                ),
+                backgroundColor: colorScheme.primary,
+                foregroundColor: colorScheme.onPrimary,
+                elevation: 2,
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('Nova transação',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+              ),
       ),
       body: CustomScrollView(
+        physics: const BouncingScrollPhysics(
+          parent: AlwaysScrollableScrollPhysics(),
+        ),
         slivers: [
-          // ① Header expansível com saldo
           balanceAsync.when(
             loading: () => _HomeHeader(
               isLoading: true,
@@ -117,28 +140,57 @@ class _HomePage extends ConsumerWidget {
               hideBalance: hideBalance,
             ),
           ),
-
-          const SliverToBoxAdapter(child: Gap(8)),
-
-          // ② Card de saúde financeira
           SliverToBoxAdapter(
-            child: ref.watch(healthScoreProvider).when(
-                  loading: () =>
-                      const HealthScoreCard(score: 0, isLoading: true),
-                  error: (_, __) => const HealthScoreCard(score: 0),
-                  data: (score) => HealthScoreCard(score: score),
-                ),
+            child: AnimatedSize(
+              duration: _selectionTransitionDuration,
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.topCenter,
+              child: SizedBox(height: selectionMode ? 0 : 8),
+            ),
           ),
-
-          const SliverToBoxAdapter(child: Gap(12)),
-
-          // ③ Barra de filtros fixada — FORA do SliverMainAxisGroup
-          //    TransactionFilterBarSliver lê/escreve transactionsFilterProvider
+          SliverToBoxAdapter(
+            child: AnimatedSize(
+              duration: _selectionTransitionDuration,
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.topCenter,
+              child: AnimatedSwitcher(
+                duration: _selectionTransitionDuration,
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, animation) {
+                  return FadeTransition(
+                    opacity: animation,
+                    child: SizeTransition(
+                      sizeFactor: animation,
+                      axisAlignment: -1,
+                      child: child,
+                    ),
+                  );
+                },
+                child: selectionMode
+                    ? const SizedBox.shrink(key: ValueKey('health_hidden'))
+                    : KeyedSubtree(
+                        key: const ValueKey('health_visible'),
+                        child: ref.watch(healthScoreProvider).when(
+                              loading: () => const HealthScoreCard(
+                                  score: 0, isLoading: true),
+                              error: (_, __) => const HealthScoreCard(score: 0),
+                              data: (score) => HealthScoreCard(score: score),
+                            ),
+                      ),
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: AnimatedSize(
+              duration: _selectionTransitionDuration,
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.topCenter,
+              child: SizedBox(height: selectionMode ? 6 : 12),
+            ),
+          ),
           const TransactionFilterBarSliver(),
-
-          // ④ Lista de transações (sem header interno)
           const TransactionsListPage(),
-
           const SliverToBoxAdapter(child: Gap(100)),
         ],
       ),
@@ -167,25 +219,209 @@ class _HomeHeader extends ConsumerWidget {
     required this.hideBalance,
   });
 
+  static const _selectionTransitionDuration = Duration(milliseconds: 280);
+
+  void _invalidateAfterDelete(WidgetRef ref) {
+    ref.invalidate(transactionsByMonthProvider);
+    ref.invalidate(transactionsProvider);
+    ref.invalidate(healthScoreProvider);
+    ref.invalidate(balanceProvider);
+    ref.invalidate(cardLimitDetailsProvider);
+  }
+
+  Future<void> _deleteSelected(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    // ref.read: lemos os IDs no momento do clique, sem watch
+    final selectedIds = ref.read(selectedTransactionIdsProvider);
+    final cs = Theme.of(context).colorScheme;
+    if (selectedIds.isEmpty) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: cs.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusModal),
+        ),
+        title: Text(
+          'Excluir ${selectedIds.length} transações?',
+          style: AppTheme.titleStyle(context, fontSize: 16),
+        ),
+        content: Text(
+          'Essa ação não pode ser desfeita.',
+          style: AppTheme.subtitleStyle(context, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: cs.error,
+              foregroundColor: cs.onError,
+            ),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    for (final id in selectedIds) {
+      await DatabaseHelper.instance.deleteTransaction(id);
+    }
+
+    ref.read(selectedTransactionIdsProvider.notifier).clear();
+    _invalidateAfterDelete(ref);
+
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      AppTheme.snackBar(
+        context,
+        message: '${selectedIds.length} transações excluídas',
+        icon: Icons.delete_outline_rounded,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
     final greetingText = _greeting();
+    // select por count: rebuilda apenas quando o número de selecionados muda
+    final selectedCount = ref.watch(
+      selectedTransactionIdsProvider.select((ids) => ids.length),
+    );
+    final selectionMode = selectedCount > 0;
+    final titleText =
+        '$selectedCount selecionada${selectedCount > 1 ? 's' : ''}';
 
     return SliverAppBar(
       expandedHeight: 250,
       pinned: true,
       elevation: 0,
+      scrolledUnderElevation: 4,
+      surfaceTintColor: Colors.transparent,
+      shadowColor: Colors.black.withAlpha(60),
       backgroundColor: cs.primary,
       systemOverlayStyle: SystemUiOverlayStyle.light,
+      centerTitle: false,
+      leading: AnimatedSwitcher(
+        duration: _selectionTransitionDuration,
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        transitionBuilder: (child, animation) => FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.85, end: 1).animate(animation),
+            child: child,
+          ),
+        ),
+        child: selectionMode
+            ? IconButton(
+                key: const ValueKey('selection_close'),
+                tooltip: 'Cancelar seleção',
+                onPressed: () =>
+                    ref.read(selectedTransactionIdsProvider.notifier).clear(),
+                icon: Icon(Icons.close_rounded, color: cs.onPrimary),
+              )
+            : Padding(
+                key: const ValueKey('normal_logo'),
+                padding: const EdgeInsets.all(10),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: cs.onPrimary.withAlpha(28),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Center(
+                    child: Text(
+                      'N',
+                      style: TextStyle(
+                        color: cs.onPrimary,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -0.5,
+                        height: 1,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+      ),
+      title: AnimatedSwitcher(
+        duration: _selectionTransitionDuration,
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        transitionBuilder: (child, animation) => FadeTransition(
+          opacity: animation,
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0, 0.18),
+              end: Offset.zero,
+            ).animate(animation),
+            child: child,
+          ),
+        ),
+        child: selectionMode
+            ? Text(
+                titleText,
+                key: ValueKey(titleText),
+                style: AppTheme.titleStyle(
+                  context,
+                  fontSize: 16,
+                  color: cs.onPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+              )
+            : Text(
+                'Nexa',
+                key: const ValueKey('normal_title'),
+                style: TextStyle(
+                  color: cs.onPrimary,
+                  fontSize: 21,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.5,
+                ),
+              ),
+      ),
+      actions: [
+        AnimatedSwitcher(
+          duration: _selectionTransitionDuration,
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          transitionBuilder: (child, animation) => FadeTransition(
+            opacity: animation,
+            child: ScaleTransition(
+              scale: Tween<double>(begin: 0.85, end: 1).animate(animation),
+              child: child,
+            ),
+          ),
+          child: selectionMode
+              ? IconButton(
+                  key: const ValueKey('selection_delete'),
+                  tooltip: 'Excluir selecionadas',
+                  onPressed: () => _deleteSelected(context, ref),
+                  icon: Icon(Icons.delete_outline_rounded, color: cs.onPrimary),
+                )
+              : const SizedBox.shrink(key: ValueKey('normal_actions_hidden')),
+        ),
+      ],
       flexibleSpace: FlexibleSpaceBar(
-        collapseMode: CollapseMode.pin,
+        collapseMode: CollapseMode.parallax,
         background: Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [cs.primary, cs.primary.withAlpha(217)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                cs.primary,
+                Color.lerp(cs.primary, Colors.black, 0.14)!,
+              ],
             ),
           ),
           padding: const EdgeInsets.fromLTRB(
@@ -194,122 +430,175 @@ class _HomeHeader extends ConsumerWidget {
             AppTheme.paddingScreen,
             AppTheme.paddingScreen,
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.end,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '$greetingText 👋',
-                style: TextStyle(
-                  color: cs.onPrimary.withAlpha(166),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
+          child: AnimatedSwitcher(
+            duration: _selectionTransitionDuration,
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            layoutBuilder: (currentChild, previousChildren) => Stack(
+              alignment: Alignment.bottomLeft,
+              children: [
+                ...previousChildren,
+                if (currentChild != null) currentChild,
+              ],
+            ),
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0, 0.08),
+                  end: Offset.zero,
+                ).animate(animation),
+                child: child,
               ),
-              const Gap(2),
-              Text(
-                'Saldo disponível',
-                style: TextStyle(
-                  color: cs.onPrimary.withAlpha(166),
-                  fontSize: 12,
-                  letterSpacing: 0.3,
-                ),
-              ),
-              const Gap(2),
-
-              if (isLoading)
-                AppShimmer(width: 160, height: 36, color: cs.onPrimary)
-              else
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        hideBalance
-                            ? '••••••'
-                            : CurrencyFormatter.format(availableCents),
-                        style: TextStyle(
-                          color: cs.onPrimary,
-                          fontSize: 32,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -1,
-                          height: 1,
+            ),
+            child: selectionMode
+                ? Align(
+                    key: const ValueKey('selection_header_content'),
+                    alignment: Alignment.bottomLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '$selectedCount',
+                            style: TextStyle(
+                              color: cs.onPrimary,
+                              fontSize: 56,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -2,
+                              height: 1,
+                            ),
+                          ),
+                          const Gap(10),
+                          Text(
+                            'Toque na lixeira para excluir em lote',
+                            style: TextStyle(
+                              color: cs.onPrimary.withAlpha(140),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : Align(
+                    key: const ValueKey('default_header_content'),
+                    alignment: Alignment.bottomLeft,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '$greetingText 👋',
+                          style: TextStyle(
+                            color: cs.onPrimary.withAlpha(179),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.1,
+                          ),
                         ),
-                      ),
-                    ),
-                    const Gap(8),
-                    IconButton(
-                      onPressed: () => ref
-                          .read(appSettingsProvider.notifier)
-                          .saveBoolSetting('hide_balance', !hideBalance),
-                      icon: Icon(
-                        hideBalance
-                            ? Icons.visibility_off_rounded
-                            : Icons.visibility_rounded,
-                        color: cs.onPrimary,
-                      ),
-                      tooltip: hideBalance ? 'Mostrar saldo' : 'Ocultar saldo',
-                    ),
-                  ],
-                ),
-
-              if (!isLoading && initialBalanceCents > 0)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    hideBalance
-                        ? 'Saldo anterior: ••••••'
-                        : 'Saldo anterior: ${CurrencyFormatter.format(initialBalanceCents)}',
-                    style: TextStyle(
-                      color: cs.onPrimary.withAlpha(184),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
+                        const Gap(4),
+                        Text(
+                          'Saldo disponível',
+                          style: TextStyle(
+                            color: cs.onPrimary.withAlpha(140),
+                            fontSize: 11,
+                            letterSpacing: 0.6,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const Gap(3),
+                        if (isLoading)
+                          AppShimmer(
+                              width: 160, height: 40, color: cs.onPrimary)
+                        else
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  hideBalance
+                                      ? 'R\$ \u2022\u2022\u2022\u2022\u2022\u2022'
+                                      : CurrencyFormatter.format(
+                                          availableCents),
+                                  style: TextStyle(
+                                    color: cs.onPrimary,
+                                    fontSize: 34,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: -1.5,
+                                    height: 1.1,
+                                  ),
+                                ),
+                              ),
+                              const Gap(2),
+                              IconButton(
+                                onPressed: () => ref
+                                    .read(appSettingsProvider.notifier)
+                                    .saveBoolSetting(
+                                        'hide_balance', !hideBalance),
+                                icon: Icon(
+                                  hideBalance
+                                      ? Icons.visibility_off_rounded
+                                      : Icons.visibility_rounded,
+                                  color: cs.onPrimary.withAlpha(179),
+                                  size: 18,
+                                ),
+                                tooltip: hideBalance
+                                    ? 'Mostrar saldo'
+                                    : 'Ocultar saldo',
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(
+                                    minWidth: 30, minHeight: 30),
+                              ),
+                            ],
+                          ),
+                        const Gap(14),
+                        Row(
+                          children: [
+                            Flexible(
+                              fit: FlexFit.tight,
+                              child: BalancePill(
+                                label: 'Receitas',
+                                cents: isLoading ? null : incomeCents,
+                                icon: Icons.arrow_upward_rounded,
+                                color: const Color(0xFF2ECC71),
+                                onPrimary: cs.onPrimary,
+                                isLoading: isLoading,
+                              ),
+                            ),
+                            const Gap(8),
+                            Flexible(
+                              fit: FlexFit.tight,
+                              child: BalancePill(
+                                label: 'Despesas',
+                                cents: isLoading ? null : expensesCents,
+                                icon: Icons.arrow_downward_rounded,
+                                color: Colors.redAccent,
+                                onPrimary: cs.onPrimary,
+                                isLoading: isLoading,
+                              ),
+                            ),
+                            const Gap(8),
+                            Flexible(
+                              fit: FlexFit.tight,
+                              child: BalancePill(
+                                label: 'Projetado',
+                                cents: isLoading ? null : projectedCents,
+                                icon: Icons.arrow_outward_rounded,
+                                color: Colors.yellowAccent,
+                                onPrimary: cs.onPrimary,
+                                isLoading: isLoading,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
-                ),
-
-              const Gap(12),
-
-              Row(
-                children: [
-                  Flexible(
-                    fit: FlexFit.tight,
-                    child: BalancePill(
-                      label: 'Receitas',
-                      cents: isLoading ? null : incomeCents,
-                      icon: Icons.arrow_upward_rounded,
-                      color: const Color(0xFF2ECC71),
-                      onPrimary: cs.onPrimary,
-                      isLoading: isLoading,
-                    ),
-                  ),
-                  const Gap(8),
-                  Flexible(
-                    fit: FlexFit.tight,
-                    child: BalancePill(
-                      label: 'Despesas',
-                      cents: isLoading ? null : expensesCents,
-                      icon: Icons.arrow_downward_rounded,
-                      color: Colors.redAccent,
-                      onPrimary: cs.onPrimary,
-                      isLoading: isLoading,
-                    ),
-                  ),
-                  const Gap(8),
-                  Flexible(
-                    fit: FlexFit.tight,
-                    child: BalancePill(
-                      label: 'Projetado',
-                      cents: isLoading ? null : projectedCents,
-                      icon: Icons.arrow_outward_rounded,
-                      color: Colors.yellowAccent,
-                      onPrimary: cs.onPrimary,
-                      isLoading: isLoading,
-                    ),
-                  ),
-                ],
-              ),
-            ],
           ),
         ),
       ),
@@ -417,9 +706,10 @@ class _NavItem extends StatelessWidget {
             const SizedBox(height: 3),
             Text(
               label,
-              style: TextStyle(
+              style: AppTheme.metaStyle(
+                context,
                 fontSize: 10,
-                fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
+                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
                 color: isActive ? activeColor : inactiveColor,
               ),
             ),

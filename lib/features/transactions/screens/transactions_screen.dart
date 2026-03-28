@@ -4,12 +4,13 @@ import 'package:gap/gap.dart';
 import 'package:nexa/core/database/database_helper.dart';
 import 'package:nexa/core/models/transactions.dart';
 import 'package:nexa/core/theme/app_theme.dart';
+import 'package:nexa/core/widgets/app_empty_state.dart';
 import 'package:nexa/features/cards/providers/cards_provider.dart';
 import 'package:nexa/features/home/provider/balance_provider.dart';
 import 'package:nexa/features/home/provider/health_score_provider.dart';
-import 'package:nexa/core/widgets/app_empty_state.dart';
 import 'package:nexa/features/transactions/providers/transactions_filter_provider.dart';
 import 'package:nexa/features/transactions/providers/transactions_provider.dart';
+import 'package:nexa/features/transactions/providers/transactions_selection_provider.dart';
 import 'package:nexa/features/transactions/screens/add_transactions_screen.dart';
 import 'package:nexa/features/transactions/widgets/transaction_card.dart';
 import 'package:nexa/features/transactions/widgets/transaction_filter_bar.dart';
@@ -28,8 +29,18 @@ String _formatMonth(DateTime date) =>
 
 String _monthLabel(DateTime date) {
   const months = [
-    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+    'Janeiro',
+    'Fevereiro',
+    'Março',
+    'Abril',
+    'Maio',
+    'Junho',
+    'Julho',
+    'Agosto',
+    'Setembro',
+    'Outubro',
+    'Novembro',
+    'Dezembro',
   ];
   final label = months[date.month - 1];
   if (date.year != DateTime.now().year) return '$label ${date.year}';
@@ -61,11 +72,20 @@ class TransactionFilterBarSliver extends ConsumerWidget {
         child: TransactionFilterBar(
           monthLabel: _monthLabel(filter.selectedMonth),
           isFutureMonth: _isFutureMonth(filter.selectedMonth),
-          onPrevious: notifier.previousMonth,
-          onNext: notifier.nextMonth,
+          onPrevious: () {
+            ref.read(selectedTransactionIdsProvider.notifier).clear();
+            notifier.previousMonth();
+          },
+          onNext: () {
+            ref.read(selectedTransactionIdsProvider.notifier).clear();
+            notifier.nextMonth();
+          },
           selectedFilter: filter.selectedFilter,
           filters: _filters,
-          onFilterChanged: notifier.setFilter,
+          onFilterChanged: (value) {
+            ref.read(selectedTransactionIdsProvider.notifier).clear();
+            notifier.setFilter(value);
+          },
         ),
       ),
     );
@@ -91,6 +111,13 @@ class _TransactionsListPageState extends ConsumerState<TransactionsListPage> {
   // Evita: "A dismissed Dismissible widget is still part of the tree"
   final Set<int> _dismissedIds = {};
 
+  // Chave para SliverAnimatedList
+  final GlobalKey<SliverAnimatedListState> _listKey =
+      GlobalKey<SliverAnimatedListState>();
+
+  // Última lista filtrada renderizada — usada para animar remoções
+  List<Transactions> _currentFiltered = [];
+
   /// Invalida todos os providers relacionados após uma alteração.
   void _invalidateAll() {
     ref.invalidate(transactionsByMonthProvider);
@@ -98,6 +125,70 @@ class _TransactionsListPageState extends ConsumerState<TransactionsListPage> {
     ref.invalidate(healthScoreProvider);
     ref.invalidate(balanceProvider);
     ref.invalidate(cardLimitDetailsProvider);
+  }
+
+  /// Remove um item da lista com animação de saída.
+  void _animateRemoveAt(int index, Transactions t) {
+    if (index < 0 || index >= _currentFiltered.length) return;
+    _currentFiltered.removeAt(index);
+    _listKey.currentState?.removeItem(
+      index,
+      (context, animation) => _buildRemovedItem(t, animation),
+      duration: const Duration(milliseconds: 340),
+    );
+  }
+
+  Widget _buildRemovedItem(Transactions t, Animation<double> animation) {
+    return SizeTransition(
+      sizeFactor: CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+      ),
+      child: FadeTransition(
+        opacity: CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOut,
+        ),
+        child: TransactionCard(transaction: t),
+      ),
+    );
+  }
+
+  /// Sincroniza _currentFiltered com a nova lista, animando inserções e remoções.
+  void _syncList(List<Transactions> newFiltered) {
+    final oldIds = _currentFiltered.map((t) => t.id).toList();
+    final newIds = newFiltered.map((t) => t.id).toList();
+
+    // Detecta remoções (itens no old que não estão no new)
+    for (int i = oldIds.length - 1; i >= 0; i--) {
+      if (!newIds.contains(oldIds[i])) {
+        final removed = _currentFiltered.removeAt(i);
+        _listKey.currentState?.removeItem(
+          i,
+          (context, animation) => _buildRemovedItem(removed, animation),
+          duration: const Duration(milliseconds: 340),
+        );
+      }
+    }
+
+    // Detecta inserções (itens no new que não estão nos oldIds atualizados)
+    final currentIds = _currentFiltered.map((t) => t.id).toList();
+    for (int i = 0; i < newFiltered.length; i++) {
+      if (!currentIds.contains(newFiltered[i].id)) {
+        _currentFiltered.insert(i, newFiltered[i]);
+        _listKey.currentState
+            ?.insertItem(i, duration: const Duration(milliseconds: 280));
+      }
+    }
+
+    // Atualiza dados existentes sem animar
+    for (int i = 0; i < _currentFiltered.length; i++) {
+      final matchIdx =
+          newFiltered.indexWhere((t) => t.id == _currentFiltered[i].id);
+      if (matchIdx >= 0) {
+        _currentFiltered[i] = newFiltered[matchIdx];
+      }
+    }
   }
 
   // ─── DELETE DIALOGS ────────────────────────────────────────────────────────
@@ -115,15 +206,16 @@ class _TransactionsListPageState extends ConsumerState<TransactionsListPage> {
           _errorIconContainer(cs),
           const Gap(12),
           Text('Excluir transação',
-              style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: cs.onSurface)),
+              style: AppTheme.titleStyle(context, fontSize: 16)),
         ]),
         content: Text(
           'Tem certeza que deseja excluir esta transação? Esta ação não pode ser desfeita.',
-          style: TextStyle(
-              fontSize: 14, color: cs.onSurface.withAlpha(178), height: 1.4),
+          style: AppTheme.subtitleStyle(
+            context,
+            fontSize: 14,
+            color: cs.onSurface.withAlpha(178),
+            height: 1.4,
+          ),
         ),
         actionsPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -161,16 +253,17 @@ class _TransactionsListPageState extends ConsumerState<TransactionsListPage> {
             const Gap(12),
             Expanded(
               child: Text('Transação recorrente',
-                  style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: cs.onSurface)),
+                  style: AppTheme.titleStyle(context, fontSize: 16)),
             ),
           ]),
           content: Text(
             'Deseja deletar apenas esta ou todas as parcelas futuras?',
-            style: TextStyle(
-                fontSize: 14, color: cs.onSurface.withAlpha(178), height: 1.4),
+            style: AppTheme.subtitleStyle(
+              context,
+              fontSize: 14,
+              color: cs.onSurface.withAlpha(178),
+              height: 1.4,
+            ),
           ),
           actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
           actions: [
@@ -251,16 +344,17 @@ class _TransactionsListPageState extends ConsumerState<TransactionsListPage> {
           const Gap(12),
           Expanded(
             child: Text('Compra parcelada',
-                style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: cs.onSurface)),
+                style: AppTheme.titleStyle(context, fontSize: 16)),
           ),
         ]),
         content: Text(
           'Deseja excluir somente esta parcela ou todas as parcelas desta compra?',
-          style: TextStyle(
-              fontSize: 14, color: cs.onSurface.withAlpha(178), height: 1.4),
+          style: AppTheme.subtitleStyle(
+            context,
+            fontSize: 14,
+            color: cs.onSurface.withAlpha(178),
+            height: 1.4,
+          ),
         ),
         actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
         actions: [
@@ -329,6 +423,8 @@ class _TransactionsListPageState extends ConsumerState<TransactionsListPage> {
   Widget build(BuildContext context) {
     // Lê o mês selecionado do provider compartilhado
     final filter = ref.watch(transactionsFilterProvider);
+    final selectedIds = ref.watch(selectedTransactionIdsProvider);
+    final selectionMode = selectedIds.isNotEmpty;
     final month = _formatMonth(filter.selectedMonth);
     final transactionsAsync = ref.watch(transactionsByMonthProvider(month));
 
@@ -355,11 +451,11 @@ class _TransactionsListPageState extends ConsumerState<TransactionsListPage> {
 
         final filtered = filter.selectedFilter == null
             ? visible
-            : visible
-                .where((t) => t.type == filter.selectedFilter)
-                .toList();
+            : visible.where((t) => t.type == filter.selectedFilter).toList();
 
         if (filtered.isEmpty) {
+          // Limpa a lista animada quando a filtragem resulta em vazio
+          _currentFiltered = [];
           return SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.all(AppTheme.paddingScreen),
@@ -375,29 +471,87 @@ class _TransactionsListPageState extends ConsumerState<TransactionsListPage> {
           );
         }
 
-        return SliverList(
-          delegate: SliverChildBuilderDelegate(
-            (context, index) {
-              final t = filtered[index];
-              return TransactionCard(
-                transaction: t,
-                onEdit: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => AddTransactionsScreen(transaction: t)),
+        // Sincroniza a lista animada com os dados atualizados
+        if (_currentFiltered.isEmpty && filtered.isNotEmpty) {
+          // Primeira carga ou retorno do vazio — reset completo
+          _currentFiltered = List.of(filtered);
+        } else if (_currentFiltered.isNotEmpty) {
+          // Só anima se os IDs mudaram de fato (evita chamadas desnecessárias)
+          final currIds = _currentFiltered.map((t) => t.id).toSet();
+          final newIds = filtered.map((t) => t.id).toSet();
+          final hasChanges =
+              currIds.length != newIds.length || !currIds.containsAll(newIds);
+          if (hasChanges) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _syncList(filtered);
+            });
+          }
+        }
+
+        return SliverAnimatedList(
+          key: _listKey,
+          initialItemCount: _currentFiltered.length,
+          itemBuilder: (context, index, animation) {
+            if (index >= _currentFiltered.length) {
+              return const SizedBox.shrink();
+            }
+            final t = _currentFiltered[index];
+            final txId = t.id;
+
+            return SizeTransition(
+              sizeFactor: CurvedAnimation(
+                parent: animation,
+                curve: Curves.easeOutCubic,
+              ),
+              child: FadeTransition(
+                opacity: CurvedAnimation(
+                  parent: animation,
+                  curve: Curves.easeOut,
                 ),
-                onDeleteWithContext: (ctx) =>
-                    _handleDeleteTransaction(ctx, t),
-                onDelete: () {
-                  if (t.id != null) {
-                    setState(() => _dismissedIds.add(t.id!));
-                  }
-                  _invalidateAll();
-                },
-              );
-            },
-            childCount: filtered.length,
-          ),
+                child: TransactionCard(
+                  transaction: t,
+                  selectionMode: selectionMode,
+                  isSelected: txId != null && selectedIds.contains(txId),
+                  onActivateSelection: txId == null
+                      ? null
+                      : () {
+                          ref
+                              .read(selectedTransactionIdsProvider.notifier)
+                              .add(txId);
+                        },
+                  onToggleSelection: txId == null
+                      ? null
+                      : () {
+                          ref
+                              .read(selectedTransactionIdsProvider.notifier)
+                              .toggle(txId);
+                        },
+                  onEdit: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => AddTransactionsScreen(transaction: t)),
+                  ),
+                  onDeleteWithContext: (ctx) =>
+                      _handleDeleteTransaction(ctx, t),
+                  onDelete: () {
+                    if (t.id != null) {
+                      setState(() => _dismissedIds.add(t.id!));
+                      ref
+                          .read(selectedTransactionIdsProvider.notifier)
+                          .remove(t.id!);
+                    }
+                    // Anima a remoção
+                    final removeIdx =
+                        _currentFiltered.indexWhere((tx) => tx.id == t.id);
+                    if (removeIdx >= 0) {
+                      _animateRemoveAt(removeIdx, t);
+                    }
+                    _invalidateAll();
+                  },
+                ),
+              ),
+            );
+          },
         );
       },
     );

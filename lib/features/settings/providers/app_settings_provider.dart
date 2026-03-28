@@ -8,6 +8,8 @@ class AppSettingsState {
   final int emergencyCurrentCents;
   final int healthAlertThreshold;
   final bool notificationsEnabled;
+  final int reminderHour;
+  final int reminderMinute;
   final bool darkMode;
   final bool hideBalance;
   final String selectedCurrency;
@@ -18,6 +20,8 @@ class AppSettingsState {
     required this.emergencyCurrentCents,
     required this.healthAlertThreshold,
     required this.notificationsEnabled,
+    required this.reminderHour,
+    required this.reminderMinute,
     required this.darkMode,
     required this.hideBalance,
     required this.selectedCurrency,
@@ -31,11 +35,22 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettingsState> {
 
   @override
   Future<AppSettingsState> build() async {
-    final salary = int.tryParse(await _db.getSetting('monthly_salary_cents') ?? '0') ?? 0;
-    final emergencyGoal = int.tryParse(await _db.getSetting('emergency_goal_cents') ?? '0') ?? 0;
-    final emergencyCurrent = int.tryParse(await _db.getSetting('emergency_current_cents') ?? '0') ?? 0;
-    final threshold = int.tryParse(await _db.getSetting('health_alert_threshold') ?? '80') ?? 80;
-    final notifications = (await _db.getSetting('notifications_enabled') ?? '1') == '1';
+    final salary =
+        int.tryParse(await _db.getSetting('monthly_salary_cents') ?? '0') ?? 0;
+    final emergencyGoal =
+        int.tryParse(await _db.getSetting('emergency_goal_cents') ?? '0') ?? 0;
+    final emergencyCurrent =
+        int.tryParse(await _db.getSetting('emergency_current_cents') ?? '0') ??
+            0;
+    final threshold =
+        int.tryParse(await _db.getSetting('health_alert_threshold') ?? '80') ??
+            80;
+    final notifications =
+        (await _db.getSetting('notifications_enabled') ?? '1') == '1';
+    final reminderHour =
+        int.tryParse(await _db.getSetting('reminder_hour') ?? '20') ?? 20;
+    final reminderMinute =
+        int.tryParse(await _db.getSetting('reminder_minute') ?? '0') ?? 0;
     final darkMode = (await _db.getSetting('dark_mode') ?? '0') == '1';
     final hideBalance = (await _db.getSetting('hide_balance') ?? '0') == '1';
     final currency = await _db.getSetting('selected_currency') ?? 'BRL';
@@ -46,6 +61,8 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettingsState> {
       emergencyCurrentCents: emergencyCurrent,
       healthAlertThreshold: threshold,
       notificationsEnabled: notifications,
+      reminderHour: reminderHour,
+      reminderMinute: reminderMinute,
       darkMode: darkMode,
       hideBalance: hideBalance,
       selectedCurrency: currency,
@@ -66,8 +83,16 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettingsState> {
     await _db.saveSetting(key, value ? '1' : '0');
     ref.invalidateSelf();
   }
+
+  /// Salva o horário do lembrete diário em uma única operação (evita dois rebuilds).
+  Future<void> saveReminderTime(int hour, int minute) async {
+    await _db.saveSetting('reminder_hour', hour.toString());
+    await _db.saveSetting('reminder_minute', minute.toString());
+    ref.invalidateSelf();
+  }
 }
 
-final appSettingsProvider = AsyncNotifierProvider<AppSettingsNotifier, AppSettingsState>(
+final appSettingsProvider =
+    AsyncNotifierProvider<AppSettingsNotifier, AppSettingsState>(
   AppSettingsNotifier.new,
 );

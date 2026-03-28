@@ -67,11 +67,7 @@ class HealthScoreCard extends StatelessWidget {
                     Expanded(
                       child: Text(
                         'Saúde Financeira',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: cs.onSurface,
-                        ),
+                        style: AppTheme.titleStyle(context, fontSize: 14),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -92,9 +88,9 @@ class HealthScoreCard extends StatelessWidget {
                         ),
                         child: Text(
                           _scoreLabel(),
-                          style: TextStyle(
+                          style: AppTheme.titleStyle(
+                            context,
                             fontSize: 11,
-                            fontWeight: FontWeight.w700,
                             color: scoreColor,
                           ),
                         ),
@@ -104,13 +100,21 @@ class HealthScoreCard extends StatelessWidget {
                 const Gap(8),
 
                 // Barra de progresso
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: isLoading ? null : score / 100,
-                    minHeight: 6,
-                    backgroundColor: cs.onSurface.withAlpha(20),
-                    valueColor: AlwaysStoppedAnimation<Color>(scoreColor),
+                TweenAnimationBuilder<double>(
+                  tween: Tween<double>(
+                    begin: 0,
+                    end: isLoading ? 0 : score / 100,
+                  ),
+                  duration: const Duration(milliseconds: 900),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, value, _) => ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: isLoading ? null : value,
+                      minHeight: 6,
+                      backgroundColor: cs.onSurface.withAlpha(20),
+                      valueColor: AlwaysStoppedAnimation<Color>(scoreColor),
+                    ),
                   ),
                 ),
                 const Gap(8),
@@ -125,7 +129,8 @@ class HealthScoreCard extends StatelessWidget {
                 else
                   Text(
                     _scoreDescription(),
-                    style: TextStyle(
+                    style: AppTheme.metaStyle(
+                      context,
                       fontSize: 12,
                       color: cs.onSurface.withAlpha(140),
                       height: 1.4,
@@ -157,30 +162,39 @@ class _ScoreCircle extends StatelessWidget {
     return SizedBox(
       width: 64,
       height: 64,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          CircularProgressIndicator(
-            value: isLoading ? null : score / 100,
-            strokeWidth: 5,
-            backgroundColor: cs.onSurface.withAlpha(20),
-            valueColor: AlwaysStoppedAnimation<Color>(color),
-          ),
-          Center(
-            child: isLoading
-                ? AppShimmer(
-                    width: 28, height: 20, borderRadius: 4, color: cs.onSurface)
-                : Text(
-                    '$score',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: color,
-                      height: 1,
+      child: TweenAnimationBuilder<double>(
+        tween: Tween<double>(begin: 0, end: isLoading ? 0 : score / 100),
+        duration: const Duration(milliseconds: 900),
+        curve: Curves.easeOutCubic,
+        builder: (context, value, _) => Stack(
+          fit: StackFit.expand,
+          children: [
+            CircularProgressIndicator(
+              value: isLoading ? null : value,
+              strokeWidth: 5,
+              backgroundColor: cs.onSurface.withAlpha(20),
+              valueColor: AlwaysStoppedAnimation<Color>(color),
+            ),
+            Center(
+              child: isLoading
+                  ? AppShimmer(
+                      width: 28,
+                      height: 20,
+                      borderRadius: 4,
+                      color: cs.onSurface)
+                  : Text(
+                      '${(value * 100).round()}',
+                      style: AppTheme.titleStyle(
+                        context,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: color,
+                        height: 1,
+                      ),
                     ),
-                  ),
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }

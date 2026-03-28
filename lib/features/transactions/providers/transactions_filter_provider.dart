@@ -8,7 +8,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class TransactionsFilterState {
   final DateTime selectedMonth;
-  final DateTime selectedMonth;
   final String? selectedFilter;
 
   const TransactionsFilterState({
@@ -29,15 +28,16 @@ class TransactionsFilterState {
   }
 }
 
-class TransactionsFilterNotifier
-    extends StateNotifier<TransactionsFilterState> {
-  TransactionsFilterNotifier()
-      : super(TransactionsFilterState(
-          selectedMonth: DateTime(
-            DateTime.now().year,
-            DateTime.now().month,
-          ),
-        ));
+class TransactionsFilterNotifier extends Notifier<TransactionsFilterState> {
+  @override
+  TransactionsFilterState build() {
+    return TransactionsFilterState(
+      selectedMonth: DateTime(
+        DateTime.now().year,
+        DateTime.now().month,
+      ),
+    );
+  }
 
   void previousMonth() {
     final m = state.selectedMonth;
@@ -58,7 +58,7 @@ class TransactionsFilterNotifier
   }
 }
 
-final transactionsFilterProvider = StateNotifierProvider<
-    TransactionsFilterNotifier, TransactionsFilterState>(
-  (ref) => TransactionsFilterNotifier(),
+final transactionsFilterProvider =
+    NotifierProvider<TransactionsFilterNotifier, TransactionsFilterState>(
+  TransactionsFilterNotifier.new,
 );

@@ -2,7 +2,7 @@ name: nexa
 description: Controle financeiro pessoal simples e eficiente.
 publish_to: "none"
 
-version: 1.0.0+1
+version: 1.1.0+2
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -24,11 +24,17 @@ dependencies:
 
   # Banco de dados
   sqflite: ^2.4.2
+  sqflite_common_ffi: ^2.3.4
   path: ^1.9.1
 
   # Formatação / Masks
   intl: ^0.20.2
   mask_text_input_formatter: ^2.9.0
+
+  # Notificações
+  flutter_local_notifications: ^18.0.1
+  timezone: ^0.9.4
+  flutter_timezone: ^5.0.2
 
   # Utilitários
   uuid: ^4.5.3
