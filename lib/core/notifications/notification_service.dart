@@ -25,14 +25,17 @@ class NotificationService {
       'Lembretes diários para registrar seus gastos no Nexa.';
 
   // ── Guard de plataforma ──────────────────────────────────────────────────
-  bool get _isMobile => !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+
+  /// Indica se notificações locais são suportadas na plataforma atual.
+  /// Retorna [true] apenas em Android e iOS.
+  bool get isSupported => !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 
   // ── Inicialização ────────────────────────────────────────────────────────
 
   /// Inicializa o plugin de notificações e configura os fusos horários.
   /// Deve ser chamado uma única vez em [main].
   Future<void> init() async {
-    if (!_isMobile) return;
+    if (!isSupported) return;
     if (_initialized) return;
 
     // Carrega base de dados de fusos horários e define o fuso local
