@@ -219,7 +219,7 @@ SQLite gerenciado por `DatabaseHelper` (singleton). Schema versão 3.
 
 **`categories`** — `id`, `name`, `icon`, `color_hex`, `type`, `is_default`
 
-**`app_settings`** — `key`, `value` (chave-valor genérico)
+**`settings`** — `key`, `value` (chave-valor genérico)
 
 ### Migrações
 
@@ -250,8 +250,8 @@ Suporta **tema claro e escuro** via `ThemeMode` configurável pelo usuário.
 
 ### Pré-requisitos
 
-- Flutter SDK ≥ 3.3.0
-- Dart SDK ≥ 3.3.0
+- Flutter SDK ≥ 3.38.4
+- Dart SDK ≥ 3.10.3
 
 ### Instalação
 

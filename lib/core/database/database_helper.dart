@@ -389,26 +389,52 @@ class DatabaseHelper {
   //
   // O código ANTIGO somava TUDO desde sempre → limite nunca resetava (bug!)
 
+  /// Calcula a data de fechamento para um determinado mês/ano,
+  /// limitando o dia de fechamento ao último dia do mês, se necessário.
+  DateTime _closingDateForMonth(int year, int month, int closingDay) {
+    // DateTime(year, month + 1, 0) retorna o último dia do mês "month".
+    final lastDayOfMonth = DateTime(year, month + 1, 0).day;
+    final safeDay = closingDay > lastDayOfMonth ? lastDayOfMonth : closingDay;
+    return DateTime(year, month, safeDay);
+  }
+
   /// Retorna o intervalo do ciclo atual do cartão (início e fim)
   /// baseado no dia de fechamento.
   ({String start, String end}) _currentBillingCycle(int closingDay) {
     final now = DateTime.now();
 
-    // Se hoje ainda não passou o dia de fechamento deste mês,
-    // o ciclo atual vai do fechamento do mês passado até hoje
-    final DateTime cycleEnd;
-    final DateTime cycleStart;
+    // Data de fechamento "real" deste mês, com o dia de fechamento
+    // limitado ao último dia do mês (evita rolagem para o próximo mês).
+    final thisMonthClosing =
+        _closingDateForMonth(now.year, now.month, closingDay);
 
-    if (now.day <= closingDay) {
+    final DateTime cycleStart;
+    final DateTime cycleEnd;
+
+    // Se hoje ainda não passou o dia de fechamento deste mês,
+    // o ciclo atual vai do fechamento do mês passado até o fechamento deste mês.
+    if (!now.isAfter(thisMonthClosing)) {
       // Ex: hoje = dia 5, fechamento = dia 10
       // Ciclo: 11/mês-passado → 10/mês-atual
-      cycleEnd = DateTime(now.year, now.month, closingDay);
-      cycleStart = DateTime(now.year, now.month - 1, closingDay + 1);
+      final previousMonth = DateTime(now.year, now.month - 1, 1);
+      final previousClosing = _closingDateForMonth(
+        previousMonth.year,
+        previousMonth.month,
+        closingDay,
+      );
+      cycleStart = previousClosing.add(const Duration(days: 1));
+      cycleEnd = thisMonthClosing;
     } else {
       // Ex: hoje = dia 15, fechamento = dia 10
       // Ciclo: 11/mês-atual → 10/mês-próximo
-      cycleEnd = DateTime(now.year, now.month + 1, closingDay);
-      cycleStart = DateTime(now.year, now.month, closingDay + 1);
+      final nextMonth = DateTime(now.year, now.month + 1, 1);
+      final nextClosing = _closingDateForMonth(
+        nextMonth.year,
+        nextMonth.month,
+        closingDay,
+      );
+      cycleStart = thisMonthClosing.add(const Duration(days: 1));
+      cycleEnd = nextClosing;
     }
 
     return (
