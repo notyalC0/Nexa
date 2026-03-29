@@ -17,6 +17,8 @@ class CardsScreen extends ConsumerStatefulWidget {
 }
 
 class _CardsScreenState extends ConsumerState<CardsScreen> {
+  // ─── Helpers de cor ─────────────────────────────────────────────────────
+
   Color _hexToColor(String? hex, {Color fallback = const Color(0xFF0D1B2A)}) {
     if (hex == null || hex.isEmpty) return fallback;
     final cleaned = hex.replaceAll('#', '');
@@ -36,7 +38,8 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
     if (k.contains('nubank')) return const Color(0xFF8B5CF6);
     if (k.contains('inter')) return const Color(0xFFFF6B00);
     if (k.contains('bradesco')) return const Color(0xFFCC0000);
-    if (k.contains('itau')) return const Color(0xFFFF6600);
+    if (k.contains('itau') || k.contains('itaú'))
+      return const Color(0xFFFF6600);
     if (k.contains('santander')) return const Color(0xFFEC0000);
     if (k.contains('c6')) return const Color(0xFF1A1A2E);
     if (k.contains('xp')) return const Color(0xFF000000);
@@ -50,15 +53,28 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
     return _fallbackColor(card.bankKeyword);
   }
 
-  void _showAddCardSheet() {
+  // ─── Sheets ─────────────────────────────────────────────────────────────
+
+  void _showCardSheet({CreditCards? existing}) {
+    final isEdit = existing != null;
     final colorScheme = Theme.of(context).colorScheme;
-    final nameController = TextEditingController();
-    final limitController = TextEditingController();
-    final bankController = TextEditingController();
-    final closingController = TextEditingController();
-    final dueController = TextEditingController();
+
+    // Controladores inicializados com valores existentes (se edição)
+    final nameController = TextEditingController(text: existing?.name ?? '');
+    final limitController = TextEditingController(
+      text: existing != null
+          ? InputMasks.centsToCurrencyText(existing.totalLimitCents)
+          : '',
+    );
+    final bankController =
+        TextEditingController(text: existing?.bankKeyword ?? '');
+    final closingController =
+        TextEditingController(text: existing?.closingDay.toString() ?? '');
+    final dueController =
+        TextEditingController(text: existing?.dueDay.toString() ?? '');
+
     final limitMask = InputMasks.currency();
-    String? pickedHex;
+    final formKey = GlobalKey<FormState>();
 
     showModalBottomSheet(
       context: context,
@@ -75,222 +91,176 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
           top: 20,
           bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
         ),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _SheetHandle(),
-              Text('Adicionar cartão',
-                  style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: colorScheme.onSurface)),
-              const Gap(4),
-              Text('Preencha os dados do cartão',
-                  style: TextStyle(
-                      fontSize: 13,
-                      color: colorScheme.onSurface.withOpacity(0.55))),
-              const Gap(20),
-              _SheetField(
+        child: Form(
+          key: formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _SheetHandle(),
+                Text(
+                  isEdit ? 'Editar cartão' : 'Adicionar cartão',
+                  style: AppTheme.titleStyle(context, fontSize: 18),
+                ),
+                const Gap(4),
+                Text(
+                  isEdit
+                      ? 'Altere os dados do cartão'
+                      : 'Preencha os dados do cartão',
+                  style: AppTheme.subtitleStyle(
+                    context,
+                    fontSize: 13,
+                    color: colorScheme.onSurface.withAlpha(140),
+                  ),
+                ),
+                const Gap(20),
+
+                // Nome
+                _SheetField(
                   controller: nameController,
                   label: 'Nome do cartão',
-                  icon: Icons.credit_card_rounded),
-              const Gap(12),
-              _SheetField(
+                  icon: Icons.credit_card_rounded,
+                  validator: (v) =>
+                      (v == null || v.trim().isEmpty) ? 'Informe o nome' : null,
+                ),
+                const Gap(12),
+
+                // Banco
+                _SheetField(
                   controller: bankController,
-                  label: 'Banco (ex: nubank)',
-                  icon: Icons.account_balance_rounded),
-              const Gap(12),
-              _SheetField(
+                  label: 'Banco (ex: nubank, itau)',
+                  icon: Icons.account_balance_rounded,
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Informe o banco'
+                      : null,
+                ),
+                const Gap(12),
+
+                // Limite
+                _SheetField(
                   controller: limitController,
-                  label: 'Limite (R\$)',
-                  icon: Icons.attach_money_rounded,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [limitMask]),
-              const Gap(12),
-              Row(
-                children: [
-                  Expanded(
-                    child: _SheetField(
+                  label: 'Limite',
+                  icon: Icons.payments_rounded,
+                  prefixText: 'R\$ ',
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [limitMask],
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'Informe o limite';
+                    if (InputMasks.currencyToCents(v) <= 0) {
+                      return 'Limite deve ser maior que zero';
+                    }
+                    return null;
+                  },
+                ),
+                const Gap(12),
+
+                // Dias — lado a lado com validação de 1–31
+                Row(
+                  children: [
+                    Expanded(
+                      child: _SheetField(
                         controller: closingController,
                         label: 'Dia fechamento',
                         icon: Icons.event_rounded,
-                        keyboardType: TextInputType.number),
-                  ),
-                  const Gap(12),
-                  Expanded(
-                    child: _SheetField(
+                        keyboardType: TextInputType.number,
+                        // Limita a 2 dígitos e só números
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(2),
+                        ],
+                        validator: _validateDay,
+                      ),
+                    ),
+                    const Gap(12),
+                    Expanded(
+                      child: _SheetField(
                         controller: dueController,
                         label: 'Dia vencimento',
                         icon: Icons.event_available_rounded,
-                        keyboardType: TextInputType.number),
-                  ),
-                ],
-              ),
-              const Gap(24),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: colorScheme.primary,
-                    foregroundColor: colorScheme.onPrimary,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.circular(AppTheme.radiusChip)),
-                  ),
-                  onPressed: () async {
-                    final limitValue = InputMasks.currencyToCents(limitController.text);
-                    final newCard = CreditCards(
-                      name: nameController.text,
-                      totalLimitCents: limitValue,
-                      closingDay: int.tryParse(closingController.text) ?? 1,
-                      dueDay: int.tryParse(dueController.text) ?? 10,
-                      colorHex: pickedHex,
-                      bankKeyword: bankController.text.toLowerCase(),
-                    );
-                    await DatabaseHelper.instance.insertCreditCards(newCard);
-                    ref.invalidate(creditCardProvider);
-                    Navigator.pop(ctx);
-                  },
-                  child: const Text('Adicionar cartão',
-                      style:
-                          TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(2),
+                        ],
+                        validator: _validateDay,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
+                const Gap(24),
+
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: colorScheme.primary,
+                      foregroundColor: colorScheme.onPrimary,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppTheme.radiusChip)),
+                    ),
+                    onPressed: () async {
+                      if (!formKey.currentState!.validate()) return;
+
+                      final limitValue =
+                          InputMasks.currencyToCents(limitController.text);
+                      final closingDay =
+                          int.parse(closingController.text.trim());
+                      final dueDay = int.parse(dueController.text.trim());
+
+                      if (isEdit) {
+                        final updated = CreditCards(
+                          id: existing.id,
+                          name: nameController.text.trim(),
+                          totalLimitCents: limitValue,
+                          closingDay: closingDay,
+                          dueDay: dueDay,
+                          colorHex: existing.colorHex,
+                          bankKeyword: bankController.text.trim().toLowerCase(),
+                        );
+                        await DatabaseHelper.instance
+                            .updateCreditCards(updated);
+                      } else {
+                        final newCard = CreditCards(
+                          name: nameController.text.trim(),
+                          totalLimitCents: limitValue,
+                          closingDay: closingDay,
+                          dueDay: dueDay,
+                          bankKeyword: bankController.text.trim().toLowerCase(),
+                        );
+                        await DatabaseHelper.instance
+                            .insertCreditCards(newCard);
+                      }
+
+                      ref.invalidate(creditCardProvider);
+                      if (ctx.mounted) Navigator.pop(ctx);
+                    },
+                    child: Text(
+                      isEdit ? 'Salvar alterações' : 'Adicionar cartão',
+                      style: AppTheme.actionStyle(context, fontSize: 15),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  void _showEditCardSheet(CreditCards card) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final nameController = TextEditingController(text: card.name);
-    final limitController = TextEditingController(
-        text: InputMasks.centsToCurrencyText(card.totalLimitCents));
-    final bankController = TextEditingController(text: card.bankKeyword);
-    final closingController =
-        TextEditingController(text: card.closingDay.toString());
-    final dueController = TextEditingController(text: card.dueDay.toString());
-    final limitMask = InputMasks.currency();
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(AppTheme.radiusModal)),
-      ),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-          left: AppTheme.paddingScreen,
-          right: AppTheme.paddingScreen,
-          top: 20,
-          bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-        ),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _SheetHandle(),
-              Text('Editar cartão',
-                  style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: colorScheme.onSurface)),
-              const Gap(4),
-              Text('Altere os dados do cartão',
-                  style: TextStyle(
-                      fontSize: 13,
-                      color: colorScheme.onSurface.withOpacity(0.55))),
-              const Gap(20),
-              _SheetField(
-                  controller: nameController,
-                  label: 'Nome do cartão',
-                  icon: Icons.credit_card_rounded),
-              const Gap(12),
-              _SheetField(
-                  controller: bankController,
-                  label: 'Banco (ex: nubank)',
-                  icon: Icons.account_balance_rounded),
-              const Gap(12),
-              _SheetField(
-                  controller: limitController,
-                  label: 'Limite (R\$)',
-                  icon: Icons.attach_money_rounded,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [limitMask]),
-              const Gap(12),
-              Row(
-                children: [
-                  Expanded(
-                    child: _SheetField(
-                        controller: closingController,
-                        label: 'Dia fechamento',
-                        icon: Icons.event_rounded,
-                        keyboardType: TextInputType.number),
-                  ),
-                  const Gap(12),
-                  Expanded(
-                    child: _SheetField(
-                        controller: dueController,
-                        label: 'Dia vencimento',
-                        icon: Icons.event_available_rounded,
-                        keyboardType: TextInputType.number),
-                  ),
-                ],
-              ),
-              const Gap(24),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: colorScheme.primary,
-                    foregroundColor: colorScheme.onPrimary,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.circular(AppTheme.radiusChip)),
-                  ),
-                  onPressed: () async {
-                    final limitValue = InputMasks.currencyToCents(limitController.text);
-                    final updated = CreditCards(
-                      id: card.id,
-                      name: nameController.text.isNotEmpty
-                          ? nameController.text
-                          : card.name,
-                      totalLimitCents: limitValue > 0
-                          ? limitValue
-                          : card.totalLimitCents,
-                      closingDay: int.tryParse(closingController.text) ??
-                          card.closingDay,
-                      dueDay: int.tryParse(dueController.text) ?? card.dueDay,
-                      colorHex: card.colorHex,
-                      bankKeyword: bankController.text.isNotEmpty
-                          ? bankController.text.toLowerCase()
-                          : card.bankKeyword,
-                    );
-                    await DatabaseHelper.instance.updateCreditCards(updated);
-                    ref.invalidate(creditCardProvider);
-                    Navigator.pop(ctx);
-                  },
-                  child: const Text('Salvar alterações',
-                      style:
-                          TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+  /// Valida se o dia informado está entre 1 e 31
+  String? _validateDay(String? value) {
+    if (value == null || value.trim().isEmpty) return 'Informe o dia';
+    final day = int.tryParse(value.trim());
+    if (day == null || day < 1 || day > 31) {
+      return 'Dia inválido (1–31)';
+    }
+    return null;
   }
 
   void _showDeleteConfirm(CreditCards card) {
@@ -306,31 +276,36 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-                color: colorScheme.error.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(AppTheme.radiusChip)),
+              color: colorScheme.error.withAlpha(25),
+              borderRadius: BorderRadius.circular(AppTheme.radiusChip),
+            ),
             child: Icon(Icons.delete_outline_rounded,
                 color: colorScheme.error, size: 20),
           ),
           const SizedBox(width: 12),
           Expanded(
-              child: Text('Remover cartão',
-                  style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: colorScheme.onSurface))),
+            child: Text(
+              'Remover cartão',
+              style: AppTheme.titleStyle(context, fontSize: 16),
+            ),
+          ),
         ]),
-        content: Text('Tem certeza que deseja remover o cartão "${card.name}"?',
-            style: TextStyle(
-                fontSize: 14,
-                color: colorScheme.onSurface.withOpacity(0.7),
-                height: 1.4)),
+        content: Text(
+          'Tem certeza que deseja remover o cartão "${card.name}"?\n\nAs transações vinculadas a ele não serão excluídas.',
+          style: AppTheme.subtitleStyle(
+            context,
+            fontSize: 14,
+            color: colorScheme.onSurface.withAlpha(178),
+            height: 1.4,
+          ),
+        ),
         actionsPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             style: TextButton.styleFrom(
-                foregroundColor: colorScheme.onSurface.withOpacity(0.6)),
+                foregroundColor: colorScheme.onSurface.withAlpha(153)),
             child: const Text('Cancelar',
                 style: TextStyle(fontWeight: FontWeight.w600)),
           ),
@@ -338,7 +313,7 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
             onPressed: () async {
               await DatabaseHelper.instance.deleteCreditCards(card.id!);
               ref.invalidate(creditCardProvider);
-              Navigator.pop(ctx);
+              if (ctx.mounted) Navigator.pop(ctx);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: colorScheme.error,
@@ -355,74 +330,85 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
     );
   }
 
+  // ─── Build ──────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final cardsAsync = ref.watch(creditCardProvider);
+
     return Scaffold(
+      backgroundColor: colorScheme.surface,
+      appBar: AppBar(
         backgroundColor: colorScheme.surface,
-        appBar: AppBar(
-          backgroundColor: colorScheme.surface,
-          elevation: 0,
-          centerTitle: false,
-          title: Text('Meus Cartões',
-              style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: colorScheme.onSurface)),
-          actions: [
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: TextButton.icon(
-                onPressed: _showAddCardSheet,
-                icon: Icon(Icons.add_rounded,
-                    size: 18, color: colorScheme.primary),
-                label: Text('Adicionar',
-                    style: TextStyle(
-                        color: colorScheme.primary,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13)),
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
+        centerTitle: false,
+        title: Text(
+          'Meus Cartões',
+          style: AppTheme.titleStyle(context, fontSize: 20),
+        ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: TextButton.icon(
+              onPressed: () => _showCardSheet(),
+              icon:
+                  Icon(Icons.add_rounded, size: 18, color: colorScheme.primary),
+              label: Text(
+                'Adicionar',
+                style: AppTheme.actionStyle(
+                  context,
+                  fontSize: 13,
+                  color: colorScheme.primary,
+                ),
               ),
             ),
-          ],
-        ),
-        body: cardsAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text('Erro: $e')),
-          data: (cards) => cards.isEmpty
-              ? _buildEmpty(colorScheme)
-              : ListView(
-                  padding: const EdgeInsets.fromLTRB(
-                      AppTheme.paddingScreen, 8, AppTheme.paddingScreen, 100),
-                  children: [
-                    ...List.generate(cards.length, (i) {
-                      final color = _cardColor(cards[i]);
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 16),
-                        child: _CreditCardWidget(
-                          card: cards[i],
-                          baseColor: color,
-                          darkColor: _darken(color),
-                          onEdit: () => _showEditCardSheet(cards[i]),
-                          onDelete: () => _showDeleteConfirm(cards[i]),
-                        ),
-                      );
-                    }),
-                    const Gap(8),
-                    Text('RESUMO',
-                        style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1.2,
-                            color: colorScheme.onSurface.withOpacity(0.45))),
-                    const Gap(10),
-                    ...List.generate(cards.length, (i) {
-                      final color = _cardColor(cards[i]);
-                      return _CardSummaryTile(card: cards[i], baseColor: color);
-                    }),
-                  ],
-                ),
-        ));
+          ),
+        ],
+      ),
+      body: cardsAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('Erro: $e')),
+        data: (cards) => cards.isEmpty
+            ? _buildEmpty(colorScheme)
+            : ListView(
+                padding: const EdgeInsets.fromLTRB(
+                    AppTheme.paddingScreen, 8, AppTheme.paddingScreen, 100),
+                children: [
+                  // Cartões visuais
+                  for (final card in cards)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: _CreditCardWidget(
+                        card: card,
+                        baseColor: _cardColor(card),
+                        darkColor: _darken(_cardColor(card)),
+                        onEdit: () => _showCardSheet(existing: card),
+                        onDelete: () => _showDeleteConfirm(card),
+                      ),
+                    ),
+
+                  const Gap(8),
+                  Text(
+                    'RESUMO',
+                    style: AppTheme.metaStyle(
+                      context,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: colorScheme.onSurface.withAlpha(115),
+                    ).copyWith(letterSpacing: 1.2),
+                  ),
+                  const Gap(10),
+
+                  // Tiles de resumo
+                  for (final card in cards)
+                    _CardSummaryTile(card: card, baseColor: _cardColor(card)),
+                ],
+              ),
+      ),
+    );
   }
 
   Widget _buildEmpty(ColorScheme colorScheme) {
@@ -433,29 +419,38 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
           Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: colorScheme.primary.withOpacity(0.08),
+              color: colorScheme.primary.withAlpha(20),
               shape: BoxShape.circle,
             ),
             child: Icon(Icons.credit_card_rounded,
-                size: 48, color: colorScheme.primary.withOpacity(0.5)),
+                size: 48, color: colorScheme.primary.withAlpha(127)),
           ),
           const Gap(16),
-          Text('Nenhum cartão cadastrado',
-              style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: colorScheme.onSurface)),
+          Text(
+            'Nenhum cartão cadastrado',
+            style: AppTheme.actionStyle(context, fontSize: 16),
+          ),
           const Gap(6),
-          Text('Adicione um cartão para rastrear seus gastos',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                  fontSize: 13, color: colorScheme.onSurface.withOpacity(0.5))),
+          Text(
+            'Adicione um cartão para rastrear seus gastos',
+            textAlign: TextAlign.center,
+            style: AppTheme.metaStyle(
+              context,
+              fontSize: 13,
+              color: colorScheme.onSurface.withAlpha(127),
+            ),
+          ),
           const Gap(24),
           ElevatedButton.icon(
-            onPressed: _showAddCardSheet,
+            onPressed: () => _showCardSheet(),
             icon: const Icon(Icons.add_rounded, size: 18),
-            label: const Text('Adicionar cartão',
-                style: TextStyle(fontWeight: FontWeight.w600)),
+            label: Text(
+              'Adicionar cartão',
+              style: AppTheme.actionStyle(
+                context,
+                color: colorScheme.onPrimary,
+              ),
+            ),
             style: ElevatedButton.styleFrom(
               backgroundColor: colorScheme.primary,
               foregroundColor: colorScheme.onPrimary,
@@ -471,9 +466,7 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Card visual
-// ---------------------------------------------------------------------------
+// ─── CreditCardWidget ────────────────────────────────────────────────────────
 
 class _CreditCardWidget extends ConsumerWidget {
   final CreditCards card;
@@ -494,8 +487,7 @@ class _CreditCardWidget extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final detailsAsync = card.id == null
         ? const AsyncValue<CardLimitDetails>.data(
-            CardLimitDetails(usedCents: 0, dynamicLimitCents: 0),
-          )
+            CardLimitDetails(usedCents: 0, dynamicLimitCents: 0))
         : ref.watch(cardLimitDetailsProvider(card.id!));
 
     return Container(
@@ -509,7 +501,7 @@ class _CreditCardWidget extends ConsumerWidget {
         borderRadius: BorderRadius.circular(AppTheme.radiusCard),
         boxShadow: [
           BoxShadow(
-            color: darkColor.withOpacity(0.4),
+            color: darkColor.withAlpha(102),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),
@@ -517,37 +509,52 @@ class _CreditCardWidget extends ConsumerWidget {
       ),
       child: Stack(
         children: [
+          // Círculos decorativos de fundo
           Positioned(
-              right: -30,
-              top: -30,
-              child: Container(
-                  width: 140,
-                  height: 140,
-                  decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.06),
-                      shape: BoxShape.circle))),
+            right: -30,
+            top: -30,
+            child: Container(
+              width: 140,
+              height: 140,
+              decoration: BoxDecoration(
+                color: Colors.white.withAlpha(15),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
           Positioned(
-              right: 40,
-              bottom: -50,
-              child: Container(
-                  width: 180,
-                  height: 180,
-                  decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.04),
-                      shape: BoxShape.circle))),
+            right: 40,
+            bottom: -50,
+            child: Container(
+              width: 180,
+              height: 180,
+              decoration: BoxDecoration(
+                color: Colors.white.withAlpha(10),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+
           Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Nome + botões
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(card.name,
-                        style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white)),
+                    Expanded(
+                      child: Text(
+                        card.name,
+                        style: AppTheme.titleStyle(
+                          context,
+                          fontSize: 16,
+                          color: Colors.white,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -562,13 +569,20 @@ class _CreditCardWidget extends ConsumerWidget {
                   ],
                 ),
                 const Spacer(),
-                Text(card.bankKeyword.toUpperCase(),
-                    style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.white.withOpacity(0.55),
-                        letterSpacing: 1.5,
-                        fontWeight: FontWeight.w600)),
+
+                // Banco
+                Text(
+                  card.bankKeyword.toUpperCase(),
+                  style: AppTheme.metaStyle(
+                    context,
+                    fontSize: 11,
+                    color: Colors.white.withAlpha(140),
+                    fontWeight: FontWeight.w600,
+                  ).copyWith(letterSpacing: 1.5),
+                ),
                 const Gap(6),
+
+                // Limite
                 detailsAsync.when(
                   loading: () => const LinearProgressIndicator(
                     minHeight: 6,
@@ -578,22 +592,24 @@ class _CreditCardWidget extends ConsumerWidget {
                   ),
                   error: (_, __) => Text(
                     'Limite indisponível',
-                    style: TextStyle(color: Colors.white.withOpacity(0.8)),
+                    style: AppTheme.metaStyle(
+                      context,
+                      color: Colors.white.withAlpha(204),
+                    ),
                   ),
                   data: (details) {
-                    final total = details.dynamicLimitCents;
-                    final used = details.usedCents;
-                    final available = details.availableCents;
                     final percent =
                         (details.usedPercent * 100).toStringAsFixed(0);
-
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Limite Total: ${CurrencyFormatter.format(total)}',
-                          style: const TextStyle(
-                              color: Colors.white, fontWeight: FontWeight.w700),
+                          'Limite Total: ${CurrencyFormatter.format(details.dynamicLimitCents)}',
+                          style: AppTheme.titleStyle(
+                            context,
+                            fontSize: 14,
+                            color: Colors.white,
+                          ),
                         ),
                         const Gap(6),
                         ClipRRect(
@@ -602,8 +618,8 @@ class _CreditCardWidget extends ConsumerWidget {
                             minHeight: 7,
                             value: details.usedPercent,
                             backgroundColor: Colors.white24,
-                            valueColor: const AlwaysStoppedAnimation<Color>(
-                                Colors.white),
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
                           ),
                         ),
                         const Gap(8),
@@ -611,32 +627,41 @@ class _CreditCardWidget extends ConsumerWidget {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              'Disponível: ${CurrencyFormatter.format(available)}',
-                              style: TextStyle(
-                                  color: Colors.white.withOpacity(0.9),
-                                  fontSize: 12),
+                              'Disponível: ${CurrencyFormatter.format(details.availableCents)}',
+                              style: AppTheme.metaStyle(
+                                context,
+                                fontSize: 12,
+                                color: Colors.white.withAlpha(230),
+                              ),
                             ),
                             Text(
                               '$percent% utilizado',
-                              style: TextStyle(
-                                  color: Colors.white.withOpacity(0.85),
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600),
+                              style: AppTheme.metaStyle(
+                                context,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white.withAlpha(217),
+                              ),
                             ),
                           ],
                         ),
                         const Gap(4),
                         Text(
-                          'Usado: ${CurrencyFormatter.format(used)}',
-                          style: TextStyle(
-                              color: Colors.white.withOpacity(0.9),
-                              fontSize: 12),
+                          'Usado: ${CurrencyFormatter.format(details.usedCents)}',
+                          style: AppTheme.metaStyle(
+                            context,
+                            fontSize: 12,
+                            color: Colors.white.withAlpha(230),
+                          ),
                         ),
                       ],
                     );
                   },
                 ),
+
                 const Gap(10),
+
+                // Info pills: fechamento e vencimento
                 Row(
                   children: [
                     _CardInfoPill(
@@ -670,7 +695,7 @@ class _CardIconButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(6),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.15),
+          color: Colors.white.withAlpha(38),
           borderRadius: BorderRadius.circular(AppTheme.radiusChip),
         ),
         child: Icon(icon, color: Colors.white, size: 16),
@@ -690,28 +715,29 @@ class _CardInfoPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.12),
+        color: Colors.white.withAlpha(31),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 11, color: Colors.white.withOpacity(0.8)),
+          Icon(icon, size: 11, color: Colors.white.withAlpha(204)),
           const SizedBox(width: 4),
-          Text(label,
-              style: TextStyle(
-                  fontSize: 11,
-                  color: Colors.white.withOpacity(0.9),
-                  fontWeight: FontWeight.w500)),
+          Text(
+            label,
+            style: AppTheme.metaStyle(
+              context,
+              fontSize: 11,
+              color: Colors.white.withAlpha(230),
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-// ---------------------------------------------------------------------------
-// Tile de resumo
-// ---------------------------------------------------------------------------
+// ─── CardSummaryTile ─────────────────────────────────────────────────────────
 
 class _CardSummaryTile extends ConsumerWidget {
   final CreditCards card;
@@ -724,8 +750,7 @@ class _CardSummaryTile extends ConsumerWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final detailsAsync = card.id == null
         ? const AsyncValue<CardLimitDetails>.data(
-            CardLimitDetails(usedCents: 0, dynamicLimitCents: 0),
-          )
+            CardLimitDetails(usedCents: 0, dynamicLimitCents: 0))
         : ref.watch(cardLimitDetailsProvider(card.id!));
 
     return Container(
@@ -734,7 +759,7 @@ class _CardSummaryTile extends ConsumerWidget {
       decoration: BoxDecoration(
         color: colorScheme.surface,
         borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-        border: Border.all(color: colorScheme.onSurface.withOpacity(0.08)),
+        border: Border.all(color: colorScheme.onSurface.withAlpha(20)),
       ),
       child: Row(
         children: [
@@ -742,7 +767,7 @@ class _CardSummaryTile extends ConsumerWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: baseColor.withOpacity(0.12),
+              color: baseColor.withAlpha(31),
               borderRadius: BorderRadius.circular(AppTheme.radiusChip),
             ),
             child: Icon(Icons.credit_card_rounded, color: baseColor, size: 18),
@@ -758,24 +783,28 @@ class _CardSummaryTile extends ConsumerWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(card.name,
-                          style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: colorScheme.onSurface)),
-                      Text('${(details.usedPercent * 100).toStringAsFixed(0)}%',
-                          style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: colorScheme.onSurface)),
+                      Expanded(
+                        child: Text(
+                          card.name,
+                          style: AppTheme.actionStyle(context, fontSize: 14),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Text(
+                        '${(details.usedPercent * 100).toStringAsFixed(0)}%',
+                        style: AppTheme.titleStyle(context, fontSize: 14),
+                      ),
                     ],
                   ),
                   const Gap(4),
                   Text(
-                    'Disponível: ${CurrencyFormatter.format(details.availableCents)}\nUsado: ${CurrencyFormatter.format(details.usedCents)}',
-                    style: TextStyle(
-                        fontSize: 12,
-                        color: colorScheme.onSurface.withOpacity(0.55)),
+                    'Disponível: ${CurrencyFormatter.format(details.availableCents)}'
+                    '   Usado: ${CurrencyFormatter.format(details.usedCents)}',
+                    style: AppTheme.metaStyle(
+                      context,
+                      fontSize: 12,
+                      color: colorScheme.onSurface.withAlpha(140),
+                    ),
                   ),
                 ],
               ),
@@ -787,9 +816,7 @@ class _CardSummaryTile extends ConsumerWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Widgets auxiliares dos sheets
-// ---------------------------------------------------------------------------
+// ─── Widgets auxiliares dos sheets ───────────────────────────────────────────
 
 class _SheetHandle extends StatelessWidget {
   @override
@@ -800,56 +827,51 @@ class _SheetHandle extends StatelessWidget {
         height: 4,
         margin: const EdgeInsets.only(bottom: 20),
         decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.15),
-            borderRadius: BorderRadius.circular(2)),
+          color: Theme.of(context).colorScheme.onSurface.withAlpha(38),
+          borderRadius: BorderRadius.circular(2),
+        ),
       ),
     );
   }
 }
 
+/// Campo de texto reutilizável dos bottom sheets.
+///
+/// Agora recebe `validator` para suportar validação com Form.
 class _SheetField extends StatelessWidget {
   final TextEditingController controller;
   final String label;
   final IconData icon;
+  final String? prefixText;
   final TextInputType keyboardType;
   final List<TextInputFormatter>? inputFormatters;
+  final String? Function(String?)? validator;
 
   const _SheetField({
     required this.controller,
     required this.label,
     required this.icon,
+    this.prefixText,
     this.keyboardType = TextInputType.text,
     this.inputFormatters,
+    this.validator,
   });
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return TextField(
+    return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
       inputFormatters: inputFormatters,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon:
-            Icon(icon, size: 18, color: colorScheme.onSurface.withOpacity(0.5)),
-        filled: true,
-        fillColor: colorScheme.surfaceContainerHighest.withOpacity(0.4),
-        labelStyle: TextStyle(
-            color: colorScheme.onSurface.withOpacity(0.55), fontSize: 14),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-          borderSide:
-              BorderSide(color: colorScheme.onSurface.withOpacity(0.12)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-          borderSide: BorderSide(color: colorScheme.primary, width: 1.8),
-        ),
+      validator: validator,
+      style: AppTheme.inputTextStyle(context),
+      cursorColor: colorScheme.primary,
+      decoration: AppTheme.inputDecoration(
+        context,
+        label: label,
+        icon: icon,
+        prefixText: prefixText,
       ),
     );
   }
