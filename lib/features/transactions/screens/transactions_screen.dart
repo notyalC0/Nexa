@@ -156,12 +156,15 @@ class _TransactionsListPageState extends ConsumerState<TransactionsListPage> {
 
   /// Sincroniza _currentFiltered com a nova lista, animando inserções e remoções.
   void _syncList(List<Transactions> newFiltered) {
-    final oldIds = _currentFiltered.map((t) => t.id).toList();
-    final newIds = newFiltered.map((t) => t.id).toList();
+    // Constrói estruturas O(1) de lookup uma única vez para evitar O(n²).
+    final newIdSet = <int?>{for (final t in newFiltered) t.id};
+    final newIdToItem = <int?, Transactions>{
+      for (final t in newFiltered) t.id: t,
+    };
 
     // Detecta remoções (itens no old que não estão no new)
-    for (int i = oldIds.length - 1; i >= 0; i--) {
-      if (!newIds.contains(oldIds[i])) {
+    for (int i = _currentFiltered.length - 1; i >= 0; i--) {
+      if (!newIdSet.contains(_currentFiltered[i].id)) {
         final removed = _currentFiltered.removeAt(i);
         _listKey.currentState?.removeItem(
           i,
@@ -171,11 +174,12 @@ class _TransactionsListPageState extends ConsumerState<TransactionsListPage> {
       }
     }
 
-    // Detecta inserções (itens no new que não estão nos oldIds atualizados)
-    final currentIds = _currentFiltered.map((t) => t.id).toList();
+    // Detecta inserções (itens no new que não estão nos ids atuais)
+    final currentIdSet = <int?>{for (final t in _currentFiltered) t.id};
     for (int i = 0; i < newFiltered.length; i++) {
-      if (!currentIds.contains(newFiltered[i].id)) {
+      if (!currentIdSet.contains(newFiltered[i].id)) {
         _currentFiltered.insert(i, newFiltered[i]);
+        currentIdSet.add(newFiltered[i].id);
         _listKey.currentState
             ?.insertItem(i, duration: const Duration(milliseconds: 280));
       }
@@ -183,10 +187,9 @@ class _TransactionsListPageState extends ConsumerState<TransactionsListPage> {
 
     // Atualiza dados existentes sem animar
     for (int i = 0; i < _currentFiltered.length; i++) {
-      final matchIdx =
-          newFiltered.indexWhere((t) => t.id == _currentFiltered[i].id);
-      if (matchIdx >= 0) {
-        _currentFiltered[i] = newFiltered[matchIdx];
+      final updated = newIdToItem[_currentFiltered[i].id];
+      if (updated != null) {
+        _currentFiltered[i] = updated;
       }
     }
   }
