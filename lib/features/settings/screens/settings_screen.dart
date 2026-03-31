@@ -621,7 +621,8 @@ class SettingsScreen extends ConsumerWidget {
             ),
             const Gap(24),
 
-            // ── Notificações ─────────────────────────────────────────
+            // ── Notificações (apenas Android/iOS) ────────────────────
+            if (NotificationService.instance.isSupported) ...[
             const SettingsSectionHeader(label: 'Notificações'),
             const Gap(10),
             SettingsTile(
@@ -671,6 +672,7 @@ class SettingsScreen extends ConsumerWidget {
               ),
             ],
             const Gap(24),
+            ], // if (NotificationService.instance.isSupported)
 
             // ── Categorias ────────────────────────────────────────────
             const SettingsSectionHeader(label: 'Categorias'),
