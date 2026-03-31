@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,6 +14,8 @@ import 'package:nexa/features/home/provider/balance_provider.dart';
 import 'package:nexa/features/home/provider/health_score_provider.dart';
 import 'package:nexa/features/home/widgets/balance_pill.dart';
 import 'package:nexa/features/home/widgets/health_score_card.dart';
+import 'package:nexa/features/insights/providers/analytics_provider.dart';
+import 'package:nexa/features/insights/screens/insights_screen.dart';
 import 'package:nexa/features/settings/providers/app_settings_provider.dart';
 import 'package:nexa/features/settings/screens/settings_screen.dart';
 import 'package:nexa/features/transactions/providers/transactions_provider.dart';
@@ -51,6 +55,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           children: const [
             _HomePage(),
             CardsScreen(),
+            InsightsScreen(),
             SettingsScreen(),
           ],
         ),
@@ -227,6 +232,7 @@ class _HomeHeader extends ConsumerWidget {
     ref.invalidate(healthScoreProvider);
     ref.invalidate(balanceProvider);
     ref.invalidate(cardLimitDetailsProvider);
+    ref.invalidate(analyticsProvider);
   }
 
   Future<void> _deleteSelected(
@@ -293,7 +299,11 @@ class _HomeHeader extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
     final greetingText = _greeting();
-    // select por count: rebuilda apenas quando o número de selecionados muda
+    final userName =
+        ref.watch(appSettingsProvider).asData?.value.userName ?? '';
+    final greetingWithName = userName.isNotEmpty
+        ? '$greetingText, $userName 👋'
+        : '$greetingText 👋';
     final selectedCount = ref.watch(
       selectedTransactionIdsProvider.select((ids) => ids.length),
     );
@@ -333,24 +343,7 @@ class _HomeHeader extends ConsumerWidget {
             : Padding(
                 key: const ValueKey('normal_logo'),
                 padding: const EdgeInsets.all(10),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: cs.onPrimary.withAlpha(28),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Center(
-                    child: Text(
-                      'N',
-                      style: TextStyle(
-                        color: cs.onPrimary,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -0.5,
-                        height: 1,
-                      ),
-                    ),
-                  ),
-                ),
+                child: _UserAvatar(size: 30),
               ),
       ),
       title: AnimatedSwitcher(
@@ -490,14 +483,40 @@ class _HomeHeader extends ConsumerWidget {
                       mainAxisAlignment: MainAxisAlignment.end,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          '$greetingText 👋',
-                          style: TextStyle(
-                            color: cs.onPrimary.withAlpha(179),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: 0.1,
-                          ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Text(
+                              greetingWithName,
+                              style: TextStyle(
+                                color: cs.onPrimary.withAlpha(179),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                letterSpacing: 0.1,
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: () => ref
+                                  .read(appSettingsProvider.notifier)
+                                  .saveBoolSetting(
+                                      'hide_balance', !hideBalance),
+                              icon: Icon(
+                                hideBalance
+                                    ? Icons.visibility_off_rounded
+                                    : Icons.visibility_rounded,
+                                color: cs.onPrimary.withAlpha(179),
+                                size: 24,
+                              ),
+                              tooltip: hideBalance
+                                  ? 'Mostrar saldo'
+                                  : 'Ocultar saldo',
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                  minWidth: 30, minHeight: 30),
+                            ),
+                          ],
                         ),
                         const Gap(4),
                         Text(
@@ -514,47 +533,17 @@ class _HomeHeader extends ConsumerWidget {
                           AppShimmer(
                               width: 160, height: 40, color: cs.onPrimary)
                         else
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  hideBalance
-                                      ? 'R\$ \u2022\u2022\u2022\u2022\u2022\u2022'
-                                      : CurrencyFormatter.format(
-                                          availableCents),
-                                  style: TextStyle(
-                                    color: cs.onPrimary,
-                                    fontSize: 34,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: -1.5,
-                                    height: 1.1,
-                                  ),
-                                ),
-                              ),
-                              const Gap(2),
-                              IconButton(
-                                onPressed: () => ref
-                                    .read(appSettingsProvider.notifier)
-                                    .saveBoolSetting(
-                                        'hide_balance', !hideBalance),
-                                icon: Icon(
-                                  hideBalance
-                                      ? Icons.visibility_off_rounded
-                                      : Icons.visibility_rounded,
-                                  color: cs.onPrimary.withAlpha(179),
-                                  size: 18,
-                                ),
-                                tooltip: hideBalance
-                                    ? 'Mostrar saldo'
-                                    : 'Ocultar saldo',
-                                visualDensity: VisualDensity.compact,
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(
-                                    minWidth: 30, minHeight: 30),
-                              ),
-                            ],
+                          Text(
+                            hideBalance
+                                ? 'R\$ \u2022\u2022\u2022\u2022\u2022\u2022'
+                                : CurrencyFormatter.format(availableCents),
+                            style: TextStyle(
+                              color: cs.onPrimary,
+                              fontSize: 34,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -1.5,
+                              height: 1.1,
+                            ),
                           ),
                         const Gap(14),
                         Row(
@@ -652,11 +641,18 @@ class _BottomNavBar extends StatelessWidget {
                 onTap: () => onTap(1),
               ),
               _NavItem(
+                icon: Icons.bar_chart_outlined,
+                activeIcon: Icons.bar_chart_rounded,
+                label: 'Análise',
+                isActive: currentIndex == 2,
+                onTap: () => onTap(2),
+              ),
+              _NavItem(
                 icon: Icons.settings_outlined,
                 activeIcon: Icons.settings_rounded,
                 label: 'Config.',
-                isActive: currentIndex == 2,
-                onTap: () => onTap(2),
+                isActive: currentIndex == 3,
+                onTap: () => onTap(3),
               ),
             ],
           ),
@@ -716,6 +712,46 @@ class _NavItem extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+// ─── Avatar do usuário ────────────────────────────────────────────────────────
+
+class _UserAvatar extends ConsumerWidget {
+  final double size;
+
+  const _UserAvatar({required this.size});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final settings = ref.watch(appSettingsProvider).asData?.value;
+    final avatarPath = settings?.userAvatarPath;
+
+    final hasAvatar = avatarPath != null && File(avatarPath).existsSync();
+
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: cs.onPrimary.withAlpha(28),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: hasAvatar
+          ? Image.file(File(avatarPath), fit: BoxFit.cover)
+          : Center(
+              child: Text(
+                'N',
+                style: TextStyle(
+                  color: cs.onPrimary,
+                  fontSize: size * 0.56,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.5,
+                  height: 1,
+                ),
+              ),
+            ),
     );
   }
 }

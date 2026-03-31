@@ -8,6 +8,7 @@ import 'package:nexa/core/widgets/app_empty_state.dart';
 import 'package:nexa/features/cards/providers/cards_provider.dart';
 import 'package:nexa/features/home/provider/balance_provider.dart';
 import 'package:nexa/features/home/provider/health_score_provider.dart';
+import 'package:nexa/features/insights/providers/analytics_provider.dart';
 import 'package:nexa/features/transactions/providers/transactions_filter_provider.dart';
 import 'package:nexa/features/transactions/providers/transactions_provider.dart';
 import 'package:nexa/features/transactions/providers/transactions_selection_provider.dart';
@@ -125,6 +126,7 @@ class _TransactionsListPageState extends ConsumerState<TransactionsListPage> {
     ref.invalidate(healthScoreProvider);
     ref.invalidate(balanceProvider);
     ref.invalidate(cardLimitDetailsProvider);
+    ref.invalidate(analyticsProvider);
   }
 
   /// Remove um item da lista com animação de saída.
@@ -186,12 +188,17 @@ class _TransactionsListPageState extends ConsumerState<TransactionsListPage> {
     }
 
     // Atualiza dados existentes sem animar
+    bool dataUpdated = false;
     for (int i = 0; i < _currentFiltered.length; i++) {
-      final updated = newIdToItem[_currentFiltered[i].id];
-      if (updated != null) {
-        _currentFiltered[i] = updated;
+      final matchIdx =
+          newFiltered.indexWhere((t) => t.id == _currentFiltered[i].id);
+      if (matchIdx >= 0) {
+        _currentFiltered[i] = newFiltered[matchIdx];
+        dataUpdated = true;
       }
     }
+    // Força rebuild para refletir mudanças de dados (status, categoria, etc.)
+    if (dataUpdated) setState(() {});
   }
 
   // ─── DELETE DIALOGS ────────────────────────────────────────────────────────
@@ -484,12 +491,35 @@ class _TransactionsListPageState extends ConsumerState<TransactionsListPage> {
           final newIds = filtered.map((t) => t.id).toSet();
           final hasChanges =
               currIds.length != newIds.length || !currIds.containsAll(newIds);
-          if (hasChanges) {
+          // Detecta também mudanças de dados em itens existentes
+          // (mesmo ID, mas qualquer campo diferente)
+          final hasDataChanges = !hasChanges &&
+              _currentFiltered.any((curr) {
+                final updated = filtered.firstWhere(
+                  (t) => t.id == curr.id,
+                  orElse: () => curr,
+                );
+                return updated.status != curr.status ||
+                    updated.categoryID != curr.categoryID ||
+                    updated.creditCardsId != curr.creditCardsId ||
+                    updated.amountCents != curr.amountCents ||
+                    updated.description != curr.description ||
+                    updated.type != curr.type ||
+                    updated.isRecurring != curr.isRecurring ||
+                    updated.note != curr.note;
+              });
+          if (hasChanges || hasDataChanges) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted) _syncList(filtered);
             });
           }
         }
+
+        // Maps para lookup eficiente de categoria e cartão
+        final categories = ref.watch(categoriesProvider).asData?.value ?? [];
+        final cards = ref.watch(creditCardProvider).asData?.value ?? [];
+        final categoryMap = {for (final c in categories) c.id: c};
+        final cardMap = {for (final c in cards) c.id: c};
 
         return SliverAnimatedList(
           key: _listKey,
@@ -500,6 +530,11 @@ class _TransactionsListPageState extends ConsumerState<TransactionsListPage> {
             }
             final t = _currentFiltered[index];
             final txId = t.id;
+
+            // Dados para badges
+            final cat = categoryMap[t.categoryID];
+            final card =
+                t.creditCardsId != null ? cardMap[t.creditCardsId] : null;
 
             return SizeTransition(
               sizeFactor: CurvedAnimation(
@@ -515,6 +550,11 @@ class _TransactionsListPageState extends ConsumerState<TransactionsListPage> {
                   transaction: t,
                   selectionMode: selectionMode,
                   isSelected: txId != null && selectedIds.contains(txId),
+                  categoryName: cat?.name,
+                  categoryColorHex: cat?.colorHex,
+                  cardName: card?.name,
+                  cardColorHex: card?.colorHex,
+                  cardBankKeyword: card?.bankKeyword,
                   onActivateSelection: txId == null
                       ? null
                       : () {

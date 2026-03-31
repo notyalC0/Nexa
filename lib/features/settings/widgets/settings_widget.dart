@@ -32,15 +32,6 @@ class SettingsSectionHeader extends StatelessWidget {
   }
 }
 
-/// Tile de configuração com ícone, título, subtítulo e trailing widget.
-///
-/// O trailing pode ser qualquer widget:
-///   - Icon (para ações de navegação)
-///   - Switch (para toggles)
-///   - Text (para exibir valores)
-///
-/// Extraído para evitar repetição — o settings_screen tinha ~8 tiles
-/// com o mesmo Container + Row + Column, diferindo só no conteúdo.
 class SettingsTile extends StatelessWidget {
   final IconData icon;
   final String title;

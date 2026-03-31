@@ -214,10 +214,20 @@ class DatabaseHelper {
     final existingRecurringInMonth = await db.query(
       'transactions',
       columns: [
-        'amount_cents', 'type', 'status', 'description', 'date',
-        'category_id', 'credit_cards_id', 'installment_total',
-        'installment_current', 'installment_group_id', 'is_recurring',
-        'recurring_id', 'parent_id', 'note',
+        'amount_cents',
+        'type',
+        'status',
+        'description',
+        'date',
+        'category_id',
+        'credit_cards_id',
+        'installment_total',
+        'installment_current',
+        'installment_group_id',
+        'is_recurring',
+        'recurring_id',
+        'parent_id',
+        'note',
       ],
       where: 'is_recurring = 1 AND date LIKE ?',
       whereArgs: ['$targetMonthKey%'],
@@ -319,6 +329,17 @@ class DatabaseHelper {
         where: 'installment_group_id = ?', whereArgs: [groupId]);
   }
 
+  /// Deleta todas as ocorrências futuras (inclusive a de [fromDate]) de uma
+  /// série recorrente identificada por [recurringId].
+  Future<int> deleteFutureRecurring(String recurringId, String fromDate) async {
+    final db = await database;
+    return db.delete(
+      'transactions',
+      where: 'recurring_id = ? AND date >= ?',
+      whereArgs: [recurringId, fromDate],
+    );
+  }
+
   Future<int> getInstallmentGroupTotalAmount(String groupId) async {
     final db = await database;
     final result = await db.rawQuery('''
@@ -343,8 +364,8 @@ class DatabaseHelper {
 
   Future<List<CreditCards>> getCreditCards() async {
     final db = await database;
-    final maps = await db.query('credit_cards',
-        orderBy: 'name COLLATE NOCASE ASC');
+    final maps =
+        await db.query('credit_cards', orderBy: 'name COLLATE NOCASE ASC');
     return maps.map(CreditCards.fromMap).toList();
   }
 
@@ -517,8 +538,7 @@ class DatabaseHelper {
       {bool includeCarryOver = true}) async {
     final income = await getTotalIncomeForMonth(month);
     final expense = await getTotalExpensesForMonth(month);
-    final carryOver =
-        includeCarryOver ? await getCarryOverForMonth(month) : 0;
+    final carryOver = includeCarryOver ? await getCarryOverForMonth(month) : 0;
     return carryOver + income - expense;
   }
 
@@ -577,8 +597,7 @@ class DatabaseHelper {
 
   Future<String?> getSetting(String key) async {
     final db = await database;
-    final maps =
-        await db.query('settings', where: 'key = ?', whereArgs: [key]);
+    final maps = await db.query('settings', where: 'key = ?', whereArgs: [key]);
     if (maps.isEmpty) return null;
     return maps.first['value'] as String?;
   }
@@ -631,12 +650,20 @@ class DatabaseHelper {
 
   String _buildRecurringKey(Map<String, dynamic> map, String date) {
     return [
-      map['amount_cents'], map['type'], map['status'],
-      map['description'] ?? '', date, map['category_id'],
-      map['credit_cards_id'] ?? '', map['installment_total'] ?? '',
-      map['installment_current'] ?? '', map['installment_group_id'] ?? '',
-      map['is_recurring'] ?? 0, map['recurring_id'] ?? '',
-      map['parent_id'] ?? '', map['note'] ?? '',
+      map['amount_cents'],
+      map['type'],
+      map['status'],
+      map['description'] ?? '',
+      date,
+      map['category_id'],
+      map['credit_cards_id'] ?? '',
+      map['installment_total'] ?? '',
+      map['installment_current'] ?? '',
+      map['installment_group_id'] ?? '',
+      map['is_recurring'] ?? 0,
+      map['recurring_id'] ?? '',
+      map['parent_id'] ?? '',
+      map['note'] ?? '',
     ].join('|');
   }
 }

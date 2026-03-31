@@ -38,8 +38,9 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
     if (k.contains('nubank')) return const Color(0xFF8B5CF6);
     if (k.contains('inter')) return const Color(0xFFFF6B00);
     if (k.contains('bradesco')) return const Color(0xFFCC0000);
-    if (k.contains('itau') || k.contains('itaú'))
+    if (k.contains('itau') || k.contains('itaú')) {
       return const Color(0xFFFF6600);
+    }
     if (k.contains('santander')) return const Color(0xFFEC0000);
     if (k.contains('c6')) return const Color(0xFF1A1A2E);
     if (k.contains('xp')) return const Color(0xFF000000);
@@ -237,11 +238,16 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
                       }
 
                       ref.invalidate(creditCardProvider);
+                      // Atualiza o limite exibido imediatamente sem esperar nova transação
+                      if (isEdit && existing.id != null) {
+                        ref.invalidate(cardLimitDetailsProvider(existing.id!));
+                      }
                       if (ctx.mounted) Navigator.pop(ctx);
                     },
                     child: Text(
                       isEdit ? 'Salvar alterações' : 'Adicionar cartão',
-                      style: AppTheme.actionStyle(context, fontSize: 15),
+                      style: TextStyle(
+                            fontWeight: FontWeight.w600, fontSize: 15)
                     ),
                   ),
                 ),
@@ -661,7 +667,7 @@ class _CreditCardWidget extends ConsumerWidget {
 
                 const Gap(10),
 
-                // Info pills: fechamento e vencimento
+                
                 Row(
                   children: [
                     _CardInfoPill(

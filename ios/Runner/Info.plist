@@ -49,5 +49,7 @@
 		<true/>
 		<key>UIStatusBarHidden</key>
 		<true/>
+		<key>NSPhotoLibraryUsageDescription</key>
+		<string>O Nexa precisa acessar sua galeria para que você possa escolher uma foto de perfil.</string>
 	</dict>
 </plist>

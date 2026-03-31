@@ -7,8 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nexa/core/database/database_helper.dart';
 import 'package:nexa/core/database/default_categories.dart';
 import 'package:nexa/core/notifications/notification_service.dart';
-import 'package:nexa/features/home/screens/home_screen.dart';
 import 'package:nexa/features/settings/providers/app_settings_provider.dart';
+import 'package:nexa/features/splash/screens/splash_screen.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'core/theme/app_theme.dart';
@@ -30,18 +30,23 @@ void main() async {
   await db.ensureDefaultCategories(defaultCategories);
 
   // Inicializa notificações (apenas Android/iOS)
-  await NotificationService.instance.init();
+  // Envolto em try/catch: falha no serviço nunca bloqueia a inicialização do app
+  try {
+    await NotificationService.instance.init();
 
-  // Reagenda o lembrete diário caso o app tenha sido reiniciado
-  final notifEnabled =
-      (await db.getSetting('notifications_enabled') ?? '1') == '1';
-  if (notifEnabled) {
-    final hour =
-        int.tryParse(await db.getSetting('reminder_hour') ?? '20') ?? 20;
-    final minute =
-        int.tryParse(await db.getSetting('reminder_minute') ?? '0') ?? 0;
-    await NotificationService.instance
-        .scheduleDailyReminder(hour: hour, minute: minute);
+    // Reagenda o lembrete diário caso o app tenha sido reiniciado
+    final notifEnabled =
+        (await db.getSetting('notifications_enabled') ?? '0') == '1';
+    if (notifEnabled) {
+      final hour =
+          int.tryParse(await db.getSetting('reminder_hour') ?? '20') ?? 20;
+      final minute =
+          int.tryParse(await db.getSetting('reminder_minute') ?? '0') ?? 0;
+      await NotificationService.instance
+          .scheduleDailyReminder(hour: hour, minute: minute);
+    }
+  } catch (_) {
+    // Falha silenciosa: notificações indisponíveis não impedem o app de abrir
   }
 
   FlutterNativeSplash.remove();
@@ -70,7 +75,7 @@ class MyApp extends ConsumerWidget {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: themeMode,
-      home: const HomeScreen(),
+      home: const SplashScreen(),
     );
   }
 }
