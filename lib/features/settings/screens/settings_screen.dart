@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:nexa/core/database/database_helper.dart';
 import 'package:nexa/core/models/categories.dart';
 import 'package:nexa/core/notifications/notification_service.dart';
@@ -89,7 +92,7 @@ class SettingsScreen extends ConsumerWidget {
                           border: Border.all(color: cs.primary.withAlpha(38)),
                         ),
                         child: Text(
-                          'Versão 1.1.0',
+                          'Versão 1.3.0',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
@@ -546,7 +549,7 @@ class SettingsScreen extends ConsumerWidget {
               AppTheme.paddingScreen, 8, AppTheme.paddingScreen, 40),
           children: [
             // ── Perfil ──────────────────────────────────────────────
-            _ProfileCard(cs: cs),
+            const _ProfileCard(),
             const Gap(24),
 
             // ── Finanças ────────────────────────────────────────────
@@ -703,7 +706,7 @@ class SettingsScreen extends ConsumerWidget {
             SettingsTile(
               icon: Icons.info_outline_rounded,
               title: 'Sobre o Nexa',
-              subtitle: 'Versão 1.1.0',
+              subtitle: 'Versão 1.3.0',
               trailing: Icon(Icons.chevron_right_rounded,
                   color: cs.onSurface.withAlpha(89)),
               onTap: () => _showAboutDialog(context),
@@ -717,13 +720,62 @@ class SettingsScreen extends ConsumerWidget {
 
 // ─── Widgets internos ────────────────────────────────────────────────────────
 
-class _ProfileCard extends StatelessWidget {
-  final ColorScheme cs;
+class _ProfileCard extends ConsumerStatefulWidget {
+  const _ProfileCard();
 
-  const _ProfileCard({required this.cs});
+  @override
+  ConsumerState<_ProfileCard> createState() => _ProfileCardState();
+}
+
+class _ProfileCardState extends ConsumerState<_ProfileCard> {
+  bool _editing = false;
+  final _nameController = TextEditingController();
+  final _focusNode = FocusNode();
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickAvatar() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 512,
+      maxHeight: 512,
+      imageQuality: 85,
+    );
+    if (picked == null) return;
+    await ref
+        .read(appSettingsProvider.notifier)
+        .saveStringSetting('user_avatar_path', picked.path);
+  }
+
+  Future<void> _saveName(String name) async {
+    final trimmed = name.trim();
+    await ref
+        .read(appSettingsProvider.notifier)
+        .saveStringSetting('user_name', trimmed);
+    setState(() => _editing = false);
+  }
+
+  void _startEditing(String current) {
+    _nameController.text = current;
+    setState(() => _editing = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _focusNode.requestFocus();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final settings = ref.watch(appSettingsProvider).asData?.value;
+    final userName = settings?.userName ?? '';
+    final avatarPath = settings?.userAvatarPath;
+
     return Container(
       padding: const EdgeInsets.all(AppTheme.paddingCard),
       decoration: BoxDecoration(
@@ -732,31 +784,123 @@ class _ProfileCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: cs.onPrimary.withAlpha(38),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(Icons.person_rounded, color: cs.onPrimary, size: 26),
-          ),
-          const Gap(14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          // Avatar tappable
+          GestureDetector(
+            onTap: _pickAvatar,
+            child: Stack(
               children: [
-                Text('Usuário',
-                    style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: cs.onPrimary)),
-                Text('Conta pessoal',
-                    style: TextStyle(
-                        fontSize: 13, color: cs.onPrimary.withAlpha(166))),
+                Container(
+                  width: 58,
+                  height: 58,
+                  decoration: BoxDecoration(
+                    color: cs.onPrimary.withAlpha(38),
+                    shape: BoxShape.circle,
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: avatarPath != null && File(avatarPath).existsSync()
+                      ? Image.file(File(avatarPath), fit: BoxFit.cover)
+                      : Icon(Icons.person_rounded,
+                          color: cs.onPrimary, size: 30),
+                ),
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      color: cs.onPrimary,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.camera_alt_rounded,
+                        size: 12, color: cs.primary),
+                  ),
+                ),
               ],
             ),
           ),
+          const Gap(14),
+          Expanded(
+            child: _editing
+                ? TextField(
+                    controller: _nameController,
+                    focusNode: _focusNode,
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: cs.onPrimary),
+                    cursorColor: cs.onPrimary,
+                    decoration: InputDecoration(
+                      hintText: 'Seu nome',
+                      hintStyle: TextStyle(color: cs.onPrimary.withAlpha(140)),
+                      filled: true,
+                      fillColor: Colors.transparent,
+                      enabledBorder: UnderlineInputBorder(
+                        borderSide:
+                            BorderSide(color: cs.onPrimary.withAlpha(120)),
+                      ),
+                      focusedBorder: UnderlineInputBorder(
+                        borderSide: BorderSide(color: cs.onPrimary),
+                      ),
+                      contentPadding: EdgeInsets.zero,
+                      isDense: true,
+                    ),
+                    textCapitalization: TextCapitalization.words,
+                    onSubmitted: _saveName,
+                  )
+                : GestureDetector(
+                    onTap: () => _startEditing(userName),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                userName.isEmpty
+                                    ? 'Toque para definir seu nome'
+                                    : userName,
+                                style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: userName.isEmpty
+                                        ? cs.onPrimary.withAlpha(140)
+                                        : cs.onPrimary),
+                              ),
+                            ),
+                            Icon(Icons.edit_rounded,
+                                size: 14, color: cs.onPrimary.withAlpha(166)),
+                          ],
+                        ),
+                        Text('Conta pessoal',
+                            style: TextStyle(
+                                fontSize: 13,
+                                color: cs.onPrimary.withAlpha(166))),
+                      ],
+                    ),
+                  ),
+          ),
+          // Botão salvar nome (visível só no modo edição)
+          if (_editing) ...[
+            const Gap(8),
+            GestureDetector(
+              onTap: () => _saveName(_nameController.text),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: cs.onPrimary.withAlpha(28),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusChip),
+                ),
+                child: Text(
+                  'Salvar',
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: cs.onPrimary),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

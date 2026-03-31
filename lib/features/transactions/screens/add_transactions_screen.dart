@@ -11,6 +11,7 @@ import 'package:nexa/features/cards/providers/cards_provider.dart';
 import 'package:nexa/features/cards/screens/card_screen.dart';
 import 'package:nexa/features/home/provider/balance_provider.dart';
 import 'package:nexa/features/home/provider/health_score_provider.dart';
+import 'package:nexa/features/insights/providers/analytics_provider.dart';
 import 'package:nexa/features/transactions/providers/transactions_provider.dart';
 import 'package:uuid/uuid.dart';
 
@@ -150,6 +151,7 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
     ref.invalidate(healthScoreProvider);
     ref.invalidate(balanceProvider);
     ref.invalidate(cardLimitDetailsProvider);
+    ref.invalidate(analyticsProvider);
   }
 
   Future<void> _save() async {
@@ -288,6 +290,17 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
       );
       if (widget.transaction != null) {
         await db.updateTransaction(tx);
+        // Se a recorrência foi desativada, deleta as ocorrências futuras
+        final wasRecurring = widget.transaction!.isRecurring;
+        final oldRecurringId = widget.transaction!.recurringId;
+        if (wasRecurring && !_isRecurring && oldRecurringId != null) {
+          // Deleta futuras (a partir do dia seguinte à transação editada)
+          final txDate = _selectedDateForDb ?? widget.transaction!.date;
+          final nextDay = DateFormat('yyyy-MM-dd').format(
+            DateFormat('yyyy-MM-dd').parse(txDate).add(const Duration(days: 1)),
+          );
+          await db.deleteFutureRecurring(oldRecurringId, nextDay);
+        }
       } else {
         await db.insertTransaction(tx);
       }
@@ -485,24 +498,24 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-      child: IgnorePointer(
-        child: TextFormField(
+      child: InputDecorator(
+        decoration:
+            (compact ? _decCompact(label) : _dec(label, icon: icon)).copyWith(
           enabled: onTap != null,
-          readOnly: true,
-          style: AppTheme.inputTextStyle(context),
-          decoration:
-              (compact ? _decCompact(label) : _dec(label, icon: icon)).copyWith(
-            hintText: text,
-            hintStyle: AppTheme.subtitleStyle(
-              context,
-              fontSize: 15,
-              color: onTap == null ? cs.onSurface.withAlpha(102) : cs.onSurface,
-            ),
-            suffixIcon: suffix ??
-                Icon(
-                  Icons.keyboard_arrow_down_rounded,
-                  color: cs.onSurface.withAlpha(166),
-                ),
+          suffixIcon: suffix ??
+              Icon(
+                Icons.keyboard_arrow_down_rounded,
+                color: cs.onSurface.withAlpha(166),
+              ),
+        ),
+        child: Text(
+          text,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: onTap == null ? cs.onSurface.withAlpha(102) : cs.onSurface,
+            fontSize: compact ? 14 : 15,
+            fontWeight: FontWeight.w500,
           ),
         ),
       ),
@@ -692,6 +705,10 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
                     cursorColor: cs.primary,
                     decoration: _decCompact('Data'),
                     readOnly: true,
+                    showCursor: false,
+                    enableInteractiveSelection: false,
+                    keyboardType: TextInputType.none,
+                    canRequestFocus: false,
                     validator: (v) =>
                         (v == null || v.isEmpty) ? 'Informe a data' : null,
                     onTap: () async {

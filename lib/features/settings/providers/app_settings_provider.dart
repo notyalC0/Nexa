@@ -13,6 +13,8 @@ class AppSettingsState {
   final bool darkMode;
   final bool hideBalance;
   final String selectedCurrency;
+  final String userName;
+  final String? userAvatarPath;
 
   const AppSettingsState({
     required this.salaryCents,
@@ -25,6 +27,8 @@ class AppSettingsState {
     required this.darkMode,
     required this.hideBalance,
     required this.selectedCurrency,
+    required this.userName,
+    this.userAvatarPath,
   });
 
   ThemeMode get themeMode => darkMode ? ThemeMode.dark : ThemeMode.light;
@@ -46,7 +50,7 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettingsState> {
         int.tryParse(await _db.getSetting('health_alert_threshold') ?? '80') ??
             80;
     final notifications =
-        (await _db.getSetting('notifications_enabled') ?? '1') == '1';
+        (await _db.getSetting('notifications_enabled') ?? '0') == '1';
     final reminderHour =
         int.tryParse(await _db.getSetting('reminder_hour') ?? '20') ?? 20;
     final reminderMinute =
@@ -54,6 +58,8 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettingsState> {
     final darkMode = (await _db.getSetting('dark_mode') ?? '0') == '1';
     final hideBalance = (await _db.getSetting('hide_balance') ?? '0') == '1';
     final currency = await _db.getSetting('selected_currency') ?? 'BRL';
+    final userName = await _db.getSetting('user_name') ?? '';
+    final userAvatarPath = await _db.getSetting('user_avatar_path');
 
     return AppSettingsState(
       salaryCents: salary,
@@ -66,6 +72,8 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettingsState> {
       darkMode: darkMode,
       hideBalance: hideBalance,
       selectedCurrency: currency,
+      userName: userName,
+      userAvatarPath: userAvatarPath?.isEmpty == true ? null : userAvatarPath,
     );
   }
 

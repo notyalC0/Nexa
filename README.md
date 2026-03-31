@@ -2,7 +2,7 @@
 
 Aplicativo de controle financeiro pessoal desenvolvido com Flutter, focado em simplicidade, design moderno e performance.
 
-> **Versão atual:** 1.1.0
+> **Versão atual:** 1.3.0
 
 ---
 
@@ -16,6 +16,7 @@ Aplicativo de controle financeiro pessoal desenvolvido com Flutter, focado em si
 - [Temas e design](#temas-e-design)
 - [Como rodar](#como-rodar)
 - [Plataformas suportadas](#plataformas-suportadas)
+- [Changelog](#changelog)
 
 ---
 
@@ -25,11 +26,14 @@ Aplicativo de controle financeiro pessoal desenvolvido com Flutter, focado em si
 
 - Cadastro de despesas, receitas e investimentos
 - Suporte a transações **recorrentes** (geração automática mensal)
+- **Desativação de recorrência** remove automaticamente todas as ocorrências futuras
 - Suporte a **parcelamento** (divide o valor igualmente entre as parcelas, com distribuição justa de centavos)
 - Status de transação: **Confirmado** ou **Pendente**
 - Vinculação a **cartão de crédito** ou débito/dinheiro
 - Vinculação a **categoria**
 - Campo de nota livre por transação
+- **Badges visuais** no card: ícone + cor da categoria, nome + cor do cartão vinculado
+- Seletor de data **sem entrada manual** (apenas date picker)
 
 ### Lista de transações
 
@@ -41,12 +45,30 @@ Aplicativo de controle financeiro pessoal desenvolvido com Flutter, focado em si
 - **Swipe para editar** (→ arrasta) com painel azul revelado
 - **Animação de remoção** suave na lista (SliverAnimatedList)
 - Checkbox animado por card em modo multi-seleção
+- **Sincronização reativa**: a lista atualiza imediatamente ao editar dados (status, categoria, valor, recorrência)
+
+### Análise e insights
+
+- Tela dedicada de **análise financeira** com navegação mensal
+- **Resumo do mês**: receitas, despesas e saldo em cards visuais
+- **Gráfico de evolução** (BarChart): receitas vs despesas dos últimos 6 meses com tooltip interativo
+- **Gastos por categoria**: top 6 do mês com ícone, cor, barra de progresso e percentual
+- **Gastos por cartão de crédito**: split visual cartão vs débito/dinheiro + breakdown por cartão
+- **Orçamento mensal**: barra de progresso gasto vs salário configurado, com badge de status
+- **Reserva de emergência**: progresso visual meta vs valor guardado
+- **Atualização reativa**: dados recalculam automaticamente ao salvar/editar transações
+
+### Splash screen
+
+- **Splash animada** com logo, nome do app e animações sequenciais (fade + scale)
+- Transição suave para a tela principal
 
 ### Header / Home
 
 - Exibe **saldo disponível**, com opção de ocultar
 - Pills de resumo: **Receitas**, **Despesas**, **Projetado**
-- Saudação dinâmica por horário (Bom dia / Boa tarde / Boa noite)
+- Saudação dinâmica por horário (Bom dia / Boa tarde / Boa noite) com **nome do usuário**
+- **Avatar do usuário** com foto personalizada (via galeria) ou iniciais
 - Modo multi-seleção com **animações suaves** de transição (FAB, health card, header content)
 - Header colapsável com **parallax**
 
@@ -64,6 +86,7 @@ Aplicativo de controle financeiro pessoal desenvolvido com Flutter, focado em si
 
 ### Configurações
 
+- **Perfil do usuário**: nome editável + avatar via galeria de fotos (`image_picker`)
 - Toggle de visibilidade do saldo
 - Tema claro/escuro
 - Saldo inicial configurável
@@ -96,24 +119,28 @@ feature/
 
 Utiliza **Riverpod 3** com `NotifierProvider` e `FutureProvider`:
 
-| Provider                         | Tipo               | Responsabilidade                                |
-| -------------------------------- | ------------------ | ----------------------------------------------- |
-| `balanceProvider`                | `FutureProvider`   | Saldo disponível, projetado, receitas, despesas |
-| `healthScoreProvider`            | `FutureProvider`   | Score de saúde financeira (0–100)               |
-| `transactionsByMonthProvider`    | `FutureProvider`   | Lista filtrada por mês/tipo                     |
-| `transactionsProvider`           | `FutureProvider`   | Todas as transações                             |
-| `creditCardProvider`             | `FutureProvider`   | Lista de cartões                                |
-| `cardLimitDetailsProvider`       | `FutureProvider`   | Limites usados por cartão                       |
-| `selectedTransactionIdsProvider` | `NotifierProvider` | Set de IDs em multi-seleção                     |
-| `appSettingsProvider`            | `NotifierProvider` | Configurações (tema, saldo oculto, etc.)        |
+| Provider                         | Tipo               | Responsabilidade                                                   |
+| -------------------------------- | ------------------ | ------------------------------------------------------------------ |
+| `balanceProvider`                | `FutureProvider`   | Saldo disponível, projetado, receitas, despesas                    |
+| `healthScoreProvider`            | `FutureProvider`   | Score de saúde financeira (0–100)                                  |
+| `transactionsByMonthProvider`    | `FutureProvider`   | Lista filtrada por mês/tipo                                        |
+| `transactionsProvider`           | `FutureProvider`   | Todas as transações do mês selecionado                             |
+| `analyticsProvider`              | `FutureProvider`   | Dados completos de análise (trend, categorias, cartões, orçamento) |
+| `selectedMonthProvider`          | `StateProvider`    | Mês selecionado na tela de análise                                 |
+| `creditCardProvider`             | `FutureProvider`   | Lista de cartões                                                   |
+| `cardLimitDetailsProvider`       | `FutureProvider`   | Limites usados por cartão                                          |
+| `selectedTransactionIdsProvider` | `NotifierProvider` | Set de IDs em multi-seleção                                        |
+| `appSettingsProvider`            | `NotifierProvider` | Configurações (tema, saldo oculto, perfil, etc.)                   |
 
 ### Otimizações de performance
 
 - `.select()` em providers para rebuilds cirúrgicos (só rebuilda quando o dado relevante muda)
 - `RepaintBoundary` por card (isolamento de repaint)
 - `BouncingScrollPhysics` no scroll principal
-- `_syncList` com diff de IDs para o `SliverAnimatedList` (evita animações desnecessárias)
+- `_syncList` com diff de IDs + detecção de data-changes para o `SliverAnimatedList`
 - `ref.read` em callbacks (sem watch em event handlers)
+- `analyticsProvider` assiste `transactionsProvider` — atualiza automaticamente ao alterar transações
+- Invalidação centralizada via `_invalidateAll()` (transações, saldo, score, analytics)
 
 ---
 
@@ -157,7 +184,13 @@ lib/
     │   │   └── transaction_filter_bar.dart   # Barra de filtro sticky
     │   └── providers/
     │       ├── transactions_provider.dart
+    │       ├── transactions_filter_provider.dart
     │       └── transactions_selection_provider.dart
+    ├── insights/
+    │   ├── screens/insights_screen.dart      # Tela completa de análise financeira
+    │   └── providers/analytics_provider.dart # Trend, categorias, cartões, orçamento
+    ├── splash/
+    │   └── screens/splash_screen.dart        # Splash animada com logo
     ├── cards/
     │   ├── screens/card_screen.dart
     │   └── providers/cards_provider.dart
@@ -180,7 +213,8 @@ lib/
 | `mask_text_input_formatter`   | ^2.9.0  | Máscara de input monetário                        |
 | `uuid`                        | ^4.5.3  | IDs únicos para grupos de parcelas e recorrências |
 | `gap`                         | ^3.0.1  | Espaçamento semântico                             |
-| `fl_chart`                    | ^1.1.1  | Gráficos (health score)                           |
+| `fl_chart`                    | ^1.1.1  | Gráficos (health score, análise de tendência)     |
+| `image_picker`                | ^1.1.2  | Seleção de foto do avatar do usuário              |
 | `google_fonts`                | ^6.2.1  | Tipografia                                        |
 | `flutter_native_splash`       | ^2.4.7  | Splash screen nativa                              |
 | `flutter_local_notifications` | ^18.0.1 | Notificações locais agendadas (Android/iOS)       |
@@ -297,3 +331,26 @@ As permissões `POST_NOTIFICATIONS`, `VIBRATE` e `RECEIVE_BOOT_COMPLETED` são d
 | Linux      | ✅ Suportado (FFI)                       |
 | macOS      | ✅ Suportado (FFI)                       |
 | Web        | ⚠️ Não suportado (SQLite não disponível) |
+
+---
+
+## Changelog
+
+### 1.3.0
+
+- **Análise financeira**: nova tela com resumo, gráfico de evolução (6 meses), gastos por categoria, gastos por cartão, orçamento vs salário e reserva de emergência
+- **Splash screen**: animação de entrada com logo e transição suave
+- **Perfil do usuário**: nome editável e avatar via galeria no card de perfil das configurações
+- **Badges visuais**: cards de transação exibem ícone/cor da categoria e nome/cor do cartão vinculado
+- **Saudação personalizada**: header da home usa o nome do usuário + widget de avatar
+- **Desativação de recorrência**: ao desativar, ocorrências futuras são removidas automaticamente
+- **Reatividade do analytics**: dados recalculam instantaneamente ao salvar/editar transações
+- **Correção**: seletor de data bloqueia entrada manual (apenas date picker)
+- **Correção**: labels de status não transbordam em campos compactos
+- **Correção**: lista de transações reflete edições imediatamente (detecção de data-changes)
+- **Correção**: health score não quebra quando meta de emergência é zero
+
+### 1.2.0
+
+- Ícones e splash screen nativos personalizados
+- Versão inicial de notificações locais com lembrete diário configurável

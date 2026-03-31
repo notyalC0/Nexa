@@ -30,6 +30,13 @@ class TransactionCard extends StatefulWidget {
   final VoidCallback? onActivateSelection;
   final VoidCallback? onToggleSelection;
 
+  // Badges extras
+  final String? categoryName;
+  final String? categoryColorHex;
+  final String? cardName;
+  final String? cardColorHex;
+  final String? cardBankKeyword;
+
   /// Callback chamado ANTES de deletar — retorna true se deve prosseguir.
   /// Recebe o BuildContext para poder mostrar dialogs.
   /// Se null, mostra um dialog de confirmação simples interno.
@@ -45,6 +52,11 @@ class TransactionCard extends StatefulWidget {
     this.isSelected = false,
     this.onActivateSelection,
     this.onToggleSelection,
+    this.categoryName,
+    this.categoryColorHex,
+    this.cardName,
+    this.cardColorHex,
+    this.cardBankKeyword,
   });
 
   @override
@@ -398,6 +410,7 @@ class _TransactionCardState extends State<TransactionCard>
                   // ou o dialog simples como fallback
                   final shouldDelete = widget.onDeleteWithContext != null
                       ? await widget.onDeleteWithContext!(context)
+                      // ignore: use_build_context_synchronously
                       : await _confirmDelete(context);
                   if (shouldDelete) widget.onDelete?.call();
                 },
@@ -798,6 +811,31 @@ class _TransactionCardState extends State<TransactionCard>
                             ],
                           ),
                         ],
+
+                        // Badges de categoria e cartão
+                        if (widget.categoryName != null ||
+                            widget.cardName != null) ...[
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 4,
+                            children: [
+                              if (widget.categoryName != null)
+                                _TransactionBadge(
+                                  label: widget.categoryName!,
+                                  colorHex: widget.categoryColorHex,
+                                  icon: Icons.label_rounded,
+                                ),
+                              if (widget.cardName != null)
+                                _TransactionBadge(
+                                  label: widget.cardName!,
+                                  icon: Icons.credit_card_rounded,
+                                  colorHex: widget.cardColorHex,
+                                  bankKeyword: widget.cardBankKeyword,
+                                ),
+                            ],
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -832,6 +870,76 @@ class _TransactionCardState extends State<TransactionCard>
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+// ─── Badge chip interno ───────────────────────────────────────────────────────
+
+class _TransactionBadge extends StatelessWidget {
+  final String label;
+  final String? colorHex;
+  final String? bankKeyword;
+  final IconData icon;
+
+  const _TransactionBadge({
+    required this.label,
+    required this.icon,
+    this.colorHex,
+    this.bankKeyword,
+  });
+
+  Color _fallbackFromKeyword() {
+    final k = (bankKeyword ?? '').toLowerCase();
+    if (k.contains('nubank')) return const Color(0xFF8B5CF6);
+    if (k.contains('inter')) return const Color(0xFFFF6B00);
+    if (k.contains('bradesco')) return const Color(0xFFCC0000);
+    if (k.contains('itau') || k.contains('itaú')) {
+      return const Color(0xFFFF6600);
+    }
+    if (k.contains('santander')) return const Color(0xFFEC0000);
+    if (k.contains('c6')) return const Color(0xFF1A1A2E);
+    if (k.contains('xp')) return const Color(0xFF222222);
+    return const Color(0xFF5B5F97);
+  }
+
+  Color _badgeColor(BuildContext context) {
+    if (colorHex != null && colorHex!.isNotEmpty) {
+      try {
+        final hex = colorHex!.replaceFirst('#', '');
+        return Color(int.parse('FF$hex', radix: 16));
+      } catch (_) {}
+    }
+    if (bankKeyword != null && bankKeyword!.isNotEmpty) {
+      return _fallbackFromKeyword();
+    }
+    return Theme.of(context).colorScheme.onSurface.withAlpha(140);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _badgeColor(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withAlpha(28),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withAlpha(80), width: 0.8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 10, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ],
       ),
     );
   }
