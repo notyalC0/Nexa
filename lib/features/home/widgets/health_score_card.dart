@@ -20,7 +20,7 @@ class HealthScoreCard extends StatelessWidget {
   });
 
   Color _scoreColor(BuildContext context) {
-    if (score >= 80) return const Color(0xFF2ECC71); // verde
+    if (score >= 80) return AppTheme.incomeColor(context);
     if (score >= 50) return AppTheme.accentColor; // amarelo/gold
     return Theme.of(context).colorScheme.error; // vermelho
   }

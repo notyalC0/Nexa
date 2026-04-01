@@ -7,6 +7,7 @@ import 'package:nexa/core/database/database_helper.dart';
 import 'package:nexa/core/models/credit_cards.dart';
 import 'package:nexa/core/theme/app_theme.dart';
 import 'package:nexa/core/utils/input_masks.dart';
+import 'package:nexa/core/utils/responsive.dart';
 import 'package:nexa/features/cards/providers/cards_provider.dart';
 import 'package:nexa/features/cards/screens/card_screen.dart';
 import 'package:nexa/features/home/provider/balance_provider.dart';
@@ -551,409 +552,422 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(
-              AppTheme.paddingScreen, 0, AppTheme.paddingScreen, 40),
-          children: [
-            // ── Cabeçalho ──────────────────────────────────────────────
-            Text(
-              widget.transaction != null
-                  ? 'Editar Transação'
-                  : 'Nova Transação',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: Responsive.maxFormWidth),
+          child: Form(
+            key: _formKey,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(
+                  AppTheme.paddingScreen, 0, AppTheme.paddingScreen, 40),
+              children: [
+                // ── Cabeçalho ──────────────────────────────────────────────
+                Text(
+                  widget.transaction != null
+                      ? 'Editar Transação'
+                      : 'Nova Transação',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.5,
+                      ),
+                ),
+                Text(
+                  'Preencha os dados abaixo',
+                  style: TextStyle(
+                      color: cs.onSurface.withAlpha(140), fontSize: 14),
+                ),
+                const Gap(28),
+
+                // ── Valor ──────────────────────────────────────────────────
+                _SectionLabel('Valor'),
+                const Gap(8),
+                TextFormField(
+                  controller: _amountController,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  style: AppTheme.inputTextStyle(
+                    context,
+                    fontSize: 24,
                     fontWeight: FontWeight.w700,
                     letterSpacing: -0.5,
                   ),
-            ),
-            Text(
-              'Preencha os dados abaixo',
-              style:
-                  TextStyle(color: cs.onSurface.withAlpha(140), fontSize: 14),
-            ),
-            const Gap(28),
-
-            // ── Valor ──────────────────────────────────────────────────
-            _SectionLabel('Valor'),
-            const Gap(8),
-            TextFormField(
-              controller: _amountController,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              style: AppTheme.inputTextStyle(
-                context,
-                fontSize: 24,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.5,
-              ),
-              decoration: _dec('Valor').copyWith(
-                labelText: null,
-                prefixText: 'R\$ ',
-                prefixStyle: AppTheme.inputPrefixStyle(
-                  context,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
+                  decoration: _dec('Valor').copyWith(
+                    labelText: null,
+                    prefixText: 'R\$ ',
+                    prefixStyle: AppTheme.inputPrefixStyle(
+                      context,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    hintText: '0,00',
+                    hintStyle: AppTheme.subtitleStyle(
+                      context,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w700,
+                      color:
+                          Theme.of(context).colorScheme.onSurface.withAlpha(60),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 20),
+                  ),
+                  inputFormatters: [_currencyMask],
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'Informe um valor';
+                    if (InputMasks.currencyToCents(v) <= 0) {
+                      return 'Valor deve ser maior que zero';
+                    }
+                    return null;
+                  },
                 ),
-                hintText: '0,00',
-                hintStyle: AppTheme.subtitleStyle(
-                  context,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w700,
-                  color: Theme.of(context).colorScheme.onSurface.withAlpha(60),
-                ),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-              ),
-              inputFormatters: [_currencyMask],
-              validator: (v) {
-                if (v == null || v.isEmpty) return 'Informe um valor';
-                if (InputMasks.currencyToCents(v) <= 0) {
-                  return 'Valor deve ser maior que zero';
-                }
-                return null;
-              },
-            ),
-            const Gap(24),
+                const Gap(24),
 
-            // ── Tipo ───────────────────────────────────────────────────
-            _SectionLabel('Tipo'),
-            const Gap(10),
-            Row(
-              children: _types.asMap().entries.map((entry) {
-                final idx = entry.key;
-                final type = entry.value;
-                final isSelected = _selectedType == type.value;
-                return Expanded(
-                  child: GestureDetector(
-                    onTap: () => setState(() {
-                      _selectedType = type.value;
-                      _triedToSave = false;
-                    }),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      margin: EdgeInsets.only(
-                          right: idx < _types.length - 1 ? 10 : 0),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? type.color.withAlpha(38)
-                            : cs.surfaceContainerHighest.withAlpha(102),
-                        borderRadius:
-                            BorderRadius.circular(AppTheme.radiusChip),
-                        border: Border.all(
-                          color: isSelected ? type.color : Colors.transparent,
-                          width: 1.5,
-                        ),
-                      ),
-                      child: Column(
-                        children: [
-                          Icon(type.icon,
-                              color: isSelected
-                                  ? type.color
-                                  : AppTheme.textSecondary,
-                              size: 20),
-                          const Gap(5),
-                          Text(
-                            type.label,
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: isSelected
-                                  ? FontWeight.w600
-                                  : FontWeight.w400,
-                              color: isSelected
-                                  ? type.color
-                                  : AppTheme.textSecondary,
+                // ── Tipo ───────────────────────────────────────────────────
+                _SectionLabel('Tipo'),
+                const Gap(10),
+                Row(
+                  children: _types.asMap().entries.map((entry) {
+                    final idx = entry.key;
+                    final type = entry.value;
+                    final isSelected = _selectedType == type.value;
+                    return Expanded(
+                      child: GestureDetector(
+                        onTap: () => setState(() {
+                          _selectedType = type.value;
+                          _triedToSave = false;
+                        }),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          margin: EdgeInsets.only(
+                              right: idx < _types.length - 1 ? 10 : 0),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? type.color.withAlpha(38)
+                                : cs.surfaceContainerHighest.withAlpha(102),
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusChip),
+                            border: Border.all(
+                              color:
+                                  isSelected ? type.color : Colors.transparent,
+                              width: 1.5,
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-            if (_triedToSave && _selectedType == null)
-              Padding(
-                padding: const EdgeInsets.only(top: 6, left: 4),
-                child: Text(
-                  'Selecione um tipo',
-                  style: TextStyle(color: cs.error, fontSize: 12),
-                ),
-              ),
-            const Gap(24),
-
-            // ── Detalhes: Status + Data ────────────────────────────────
-            _SectionLabel('Detalhes'),
-            const Gap(10),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: _selectionField(
-                    compact: true,
-                    label: 'Status',
-                    text: _statusLabel(_selectedStatus),
-                    onTap: _openStatusPicker,
-                  ),
-                ),
-                const Gap(12),
-                Expanded(
-                  child: TextFormField(
-                    controller: _dateController,
-                    style: AppTheme.inputTextStyle(context),
-                    cursorColor: cs.primary,
-                    decoration: _decCompact('Data'),
-                    readOnly: true,
-                    showCursor: false,
-                    enableInteractiveSelection: false,
-                    keyboardType: TextInputType.none,
-                    canRequestFocus: false,
-                    validator: (v) =>
-                        (v == null || v.isEmpty) ? 'Informe a data' : null,
-                    onTap: () async {
-                      final initial = _selectedDateForDb != null
-                          ? DateFormat('yyyy-MM-dd').parse(_selectedDateForDb!)
-                          : DateTime.now();
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: initial,
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime(2030),
-                      );
-                      if (picked != null) {
-                        setState(() {
-                          _dateController.text =
-                              DateFormat('dd/MM/yyyy').format(picked);
-                          _selectedDateForDb =
-                              DateFormat('yyyy-MM-dd').format(picked);
-                        });
-                      }
-                    },
-                  ),
-                ),
-              ],
-            ),
-            const Gap(14),
-            TextFormField(
-              controller: _descriptionController,
-              style: AppTheme.inputTextStyle(context),
-              cursorColor: cs.primary,
-              decoration: _dec('Descrição', icon: Icons.edit_note_rounded),
-            ),
-            const Gap(24),
-
-            // ── Categorização ──────────────────────────────────────────
-            _SectionLabel('Categorização'),
-            const Gap(10),
-
-            // Cartão
-            cardsAsync.when(
-              loading: () => _selectionField(
-                label: 'Cartão',
-                icon: Icons.credit_card_rounded,
-                text: 'Carregando...',
-                onTap: null,
-              ),
-              error: (_, __) => _selectionField(
-                label: 'Cartão',
-                icon: Icons.credit_card_rounded,
-                text: 'Erro ao carregar',
-                onTap: null,
-              ),
-              data: (cards) => Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(
-                    child: _selectionField(
-                      label: 'Cartão',
-                      icon: Icons.credit_card_rounded,
-                      text: cards
-                              .where((c) => c.id == _selectedCardId)
-                              .firstOrNull
-                              ?.name ??
-                          'Nenhum (débito/dinheiro)',
-                      onTap: () => _openCardPicker(cards),
-                    ),
-                  ),
-                  const Gap(8),
-                  SizedBox(
-                    width: 48,
-                    height: 48,
-                    child: Material(
-                      color: cs.primary.withAlpha(25),
-                      borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-                      child: InkWell(
-                        onTap: _goToCardsAndRefresh,
-                        borderRadius:
-                            BorderRadius.circular(AppTheme.radiusChip),
-                        child: Icon(
-                          Icons.add_card_rounded,
-                          color: cs.primary,
-                          size: 22,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Gap(14),
-
-            // Categoria
-            categoriesAsync.when(
-              loading: () => _selectionField(
-                label: 'Categoria',
-                icon: Icons.category_rounded,
-                text: 'Carregando...',
-                onTap: null,
-              ),
-              error: (_, __) => _selectionField(
-                label: 'Categoria',
-                icon: Icons.category_rounded,
-                text: 'Erro ao carregar',
-                onTap: null,
-              ),
-              data: (categories) {
-                // Verifica se a categoria salva ainda existe
-                final selectedExists =
-                    categories.any((c) => c.id == _selectedCategoryId);
-                return _selectionField(
-                  label: 'Categoria',
-                  icon: Icons.category_rounded,
-                  text: selectedExists
-                      ? categories
-                              .where((c) => c.id == _selectedCategoryId)
-                              .firstOrNull
-                              ?.name ??
-                          'Selecione'
-                      : 'Selecione',
-                  onTap: categories.isEmpty
-                      ? null
-                      : () => _openCategoryPicker(categories),
-                );
-              },
-            ),
-            const Gap(24),
-
-            // ── Parcelamento (somente com cartão) ─────────────────────
-            AnimatedSize(
-              duration: const Duration(milliseconds: 260),
-              curve: Curves.easeOutCubic,
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 220),
-                switchInCurve: Curves.easeOut,
-                switchOutCurve: Curves.easeIn,
-                child: _selectedCardId == null
-                    ? const SizedBox.shrink(key: ValueKey('no_installments'))
-                    : Column(
-                        key: const ValueKey('with_installments'),
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _SectionLabel('Parcelamento'),
-                          const Gap(6),
-                          Text(
-                            'Deixe em branco ou "1" para transação única.',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: cs.onSurface.withAlpha(115),
-                            ),
-                          ),
-                          const Gap(10),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          child: Column(
                             children: [
-                              Expanded(
-                                child: TextFormField(
-                                  controller: _installmentController,
-                                  keyboardType: TextInputType.number,
-                                  style: AppTheme.inputTextStyle(context),
-                                  cursorColor: cs.primary,
-                                  decoration: _decCompact('Nº parcelas'),
-                                  inputFormatters: [
-                                    FilteringTextInputFormatter.digitsOnly,
-                                    LengthLimitingTextInputFormatter(2),
-                                  ],
-                                  validator: (v) {
-                                    if (_selectedCardId == null) return null;
-                                    if (v == null || v.isEmpty) return null;
-                                    final n = int.tryParse(v);
-                                    if (n != null && n < 1) return 'Mín. 1';
-                                    return null;
-                                  },
-                                ),
-                              ),
-                              const Gap(12),
-                              Expanded(
-                                child: TextFormField(
-                                  controller: _installmentCurrentController,
-                                  keyboardType: TextInputType.number,
-                                  style: AppTheme.inputTextStyle(context),
-                                  cursorColor: cs.primary,
-                                  decoration: _decCompact('Parcela atual'),
-                                  inputFormatters: [
-                                    FilteringTextInputFormatter.digitsOnly,
-                                    LengthLimitingTextInputFormatter(2),
-                                  ],
+                              Icon(type.icon,
+                                  color: isSelected
+                                      ? type.color
+                                      : cs.onSurface.withAlpha(140),
+                                  size: 20),
+                              const Gap(5),
+                              Text(
+                                type.label,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: isSelected
+                                      ? FontWeight.w600
+                                      : FontWeight.w400,
+                                  color: isSelected
+                                      ? type.color
+                                      : cs.onSurface.withAlpha(140),
                                 ),
                               ),
                             ],
                           ),
-                          const Gap(24),
-                        ],
+                        ),
                       ),
-              ),
-            ),
-            const Gap(24),
+                    );
+                  }).toList(),
+                ),
+                if (_triedToSave && _selectedType == null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6, left: 4),
+                    child: Text(
+                      'Selecione um tipo',
+                      style: TextStyle(color: cs.error, fontSize: 12),
+                    ),
+                  ),
+                const Gap(24),
 
-            // ── Opções ─────────────────────────────────────────────────
-            _SectionLabel('Opções'),
-            const Gap(10),
-            _OptionTile(
-              icon: Icons.repeat_rounded,
-              title: 'Recorrência mensal',
-              subtitle: 'Repete automaticamente todo mês',
-              value: _isRecurring,
-              onChanged: (v) => setState(() => _isRecurring = v),
-            ),
-            const Gap(14),
+                // ── Detalhes: Status + Data ────────────────────────────────
+                _SectionLabel('Detalhes'),
+                const Gap(10),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: _selectionField(
+                        compact: true,
+                        label: 'Status',
+                        text: _statusLabel(_selectedStatus),
+                        onTap: _openStatusPicker,
+                      ),
+                    ),
+                    const Gap(12),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _dateController,
+                        style: AppTheme.inputTextStyle(context),
+                        cursorColor: cs.primary,
+                        decoration: _decCompact('Data'),
+                        readOnly: true,
+                        showCursor: false,
+                        enableInteractiveSelection: false,
+                        keyboardType: TextInputType.none,
+                        canRequestFocus: false,
+                        validator: (v) =>
+                            (v == null || v.isEmpty) ? 'Informe a data' : null,
+                        onTap: () async {
+                          final initial = _selectedDateForDb != null
+                              ? DateFormat('yyyy-MM-dd')
+                                  .parse(_selectedDateForDb!)
+                              : DateTime.now();
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: initial,
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime(2030),
+                          );
+                          if (picked != null) {
+                            setState(() {
+                              _dateController.text =
+                                  DateFormat('dd/MM/yyyy').format(picked);
+                              _selectedDateForDb =
+                                  DateFormat('yyyy-MM-dd').format(picked);
+                            });
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const Gap(14),
+                TextFormField(
+                  controller: _descriptionController,
+                  style: AppTheme.inputTextStyle(context),
+                  cursorColor: cs.primary,
+                  decoration: _dec('Descrição', icon: Icons.edit_note_rounded),
+                ),
+                const Gap(24),
 
-            // ── Nota ───────────────────────────────────────────────────
-            TextFormField(
-              controller: _noteController,
-              maxLines: 3,
-              style: AppTheme.inputTextStyle(context),
-              cursorColor: cs.primary,
-              decoration:
-                  _dec('Nota (opcional)', icon: Icons.sticky_note_2_rounded)
-                      .copyWith(alignLabelWithHint: true),
-            ),
-            const Gap(32),
+                // ── Categorização ──────────────────────────────────────────
+                _SectionLabel('Categorização'),
+                const Gap(10),
 
-            // ── Botão salvar ───────────────────────────────────────────
-            SizedBox(
-              width: double.infinity,
-              height: 54,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: cs.primary,
-                  foregroundColor: cs.onPrimary,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.radiusChip),
+                // Cartão
+                cardsAsync.when(
+                  loading: () => _selectionField(
+                    label: 'Cartão',
+                    icon: Icons.credit_card_rounded,
+                    text: 'Carregando...',
+                    onTap: null,
+                  ),
+                  error: (_, __) => _selectionField(
+                    label: 'Cartão',
+                    icon: Icons.credit_card_rounded,
+                    text: 'Erro ao carregar',
+                    onTap: null,
+                  ),
+                  data: (cards) => Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: _selectionField(
+                          label: 'Cartão',
+                          icon: Icons.credit_card_rounded,
+                          text: cards
+                                  .where((c) => c.id == _selectedCardId)
+                                  .firstOrNull
+                                  ?.name ??
+                              'Nenhum (débito/dinheiro)',
+                          onTap: () => _openCardPicker(cards),
+                        ),
+                      ),
+                      const Gap(8),
+                      SizedBox(
+                        width: 48,
+                        height: 48,
+                        child: Material(
+                          color: cs.primary.withAlpha(25),
+                          borderRadius:
+                              BorderRadius.circular(AppTheme.radiusChip),
+                          child: InkWell(
+                            onTap: _goToCardsAndRefresh,
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusChip),
+                            child: Icon(
+                              Icons.add_card_rounded,
+                              color: cs.primary,
+                              size: 22,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                onPressed: _save,
-                child: Text(
-                  widget.transaction != null
-                      ? 'Atualizar transação'
-                      : 'Salvar transação',
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w600),
+                const Gap(14),
+
+                // Categoria
+                categoriesAsync.when(
+                  loading: () => _selectionField(
+                    label: 'Categoria',
+                    icon: Icons.category_rounded,
+                    text: 'Carregando...',
+                    onTap: null,
+                  ),
+                  error: (_, __) => _selectionField(
+                    label: 'Categoria',
+                    icon: Icons.category_rounded,
+                    text: 'Erro ao carregar',
+                    onTap: null,
+                  ),
+                  data: (categories) {
+                    // Verifica se a categoria salva ainda existe
+                    final selectedExists =
+                        categories.any((c) => c.id == _selectedCategoryId);
+                    return _selectionField(
+                      label: 'Categoria',
+                      icon: Icons.category_rounded,
+                      text: selectedExists
+                          ? categories
+                                  .where((c) => c.id == _selectedCategoryId)
+                                  .firstOrNull
+                                  ?.name ??
+                              'Selecione'
+                          : 'Selecione',
+                      onTap: categories.isEmpty
+                          ? null
+                          : () => _openCategoryPicker(categories),
+                    );
+                  },
                 ),
-              ),
+                const Gap(24),
+
+                // ── Parcelamento (somente com cartão) ─────────────────────
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 260),
+                  curve: Curves.easeOutCubic,
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 220),
+                    switchInCurve: Curves.easeOut,
+                    switchOutCurve: Curves.easeIn,
+                    child: _selectedCardId == null
+                        ? const SizedBox.shrink(
+                            key: ValueKey('no_installments'))
+                        : Column(
+                            key: const ValueKey('with_installments'),
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _SectionLabel('Parcelamento'),
+                              const Gap(6),
+                              Text(
+                                'Deixe em branco ou "1" para transação única.',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: cs.onSurface.withAlpha(115),
+                                ),
+                              ),
+                              const Gap(10),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _installmentController,
+                                      keyboardType: TextInputType.number,
+                                      style: AppTheme.inputTextStyle(context),
+                                      cursorColor: cs.primary,
+                                      decoration: _decCompact('Nº parcelas'),
+                                      inputFormatters: [
+                                        FilteringTextInputFormatter.digitsOnly,
+                                        LengthLimitingTextInputFormatter(2),
+                                      ],
+                                      validator: (v) {
+                                        if (_selectedCardId == null) {
+                                          return null;
+                                        }
+                                        if (v == null || v.isEmpty) return null;
+                                        final n = int.tryParse(v);
+                                        if (n != null && n < 1) return 'Mín. 1';
+                                        return null;
+                                      },
+                                    ),
+                                  ),
+                                  const Gap(12),
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _installmentCurrentController,
+                                      keyboardType: TextInputType.number,
+                                      style: AppTheme.inputTextStyle(context),
+                                      cursorColor: cs.primary,
+                                      decoration: _decCompact('Parcela atual'),
+                                      inputFormatters: [
+                                        FilteringTextInputFormatter.digitsOnly,
+                                        LengthLimitingTextInputFormatter(2),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const Gap(24),
+                            ],
+                          ),
+                  ),
+                ),
+                const Gap(24),
+
+                // ── Opções ─────────────────────────────────────────────────
+                _SectionLabel('Opções'),
+                const Gap(10),
+                _OptionTile(
+                  icon: Icons.repeat_rounded,
+                  title: 'Recorrência mensal',
+                  subtitle: 'Repete automaticamente todo mês',
+                  value: _isRecurring,
+                  onChanged: (v) => setState(() => _isRecurring = v),
+                ),
+                const Gap(14),
+
+                // ── Nota ───────────────────────────────────────────────────
+                TextFormField(
+                  controller: _noteController,
+                  maxLines: 3,
+                  style: AppTheme.inputTextStyle(context),
+                  cursorColor: cs.primary,
+                  decoration:
+                      _dec('Nota (opcional)', icon: Icons.sticky_note_2_rounded)
+                          .copyWith(alignLabelWithHint: true),
+                ),
+                const Gap(32),
+
+                // ── Botão salvar ───────────────────────────────────────────
+                SizedBox(
+                  width: double.infinity,
+                  height: 54,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: cs.primary,
+                      foregroundColor: cs.onPrimary,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius:
+                            BorderRadius.circular(AppTheme.radiusChip),
+                      ),
+                    ),
+                    onPressed: _save,
+                    child: Text(
+                      widget.transaction != null
+                          ? 'Atualizar transação'
+                          : 'Salvar transação',
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

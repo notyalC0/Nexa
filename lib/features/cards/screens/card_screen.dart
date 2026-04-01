@@ -7,6 +7,7 @@ import 'package:nexa/core/models/credit_cards.dart';
 import 'package:nexa/core/theme/app_theme.dart';
 import 'package:nexa/core/utils/currency_formatter.dart';
 import 'package:nexa/core/utils/input_masks.dart';
+import 'package:nexa/core/utils/responsive.dart';
 import 'package:nexa/features/cards/providers/cards_provider.dart';
 
 class CardsScreen extends ConsumerStatefulWidget {
@@ -77,186 +78,205 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
     final limitMask = InputMasks.currency();
     final formKey = GlobalKey<FormState>();
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(AppTheme.radiusModal)),
-      ),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-          left: AppTheme.paddingScreen,
-          right: AppTheme.paddingScreen,
-          top: 20,
-          bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-        ),
-        child: Form(
-          key: formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _SheetHandle(),
-                Text(
-                  isEdit ? 'Editar cartão' : 'Adicionar cartão',
-                  style: AppTheme.titleStyle(context, fontSize: 18),
-                ),
-                const Gap(4),
-                Text(
-                  isEdit
-                      ? 'Altere os dados do cartão'
-                      : 'Preencha os dados do cartão',
-                  style: AppTheme.subtitleStyle(
-                    context,
-                    fontSize: 13,
-                    color: colorScheme.onSurface.withAlpha(140),
-                  ),
-                ),
-                const Gap(20),
+    final isDesktop = Responsive.useNavRail(context);
 
-                // Nome
-                _SheetField(
-                  controller: nameController,
-                  label: 'Nome do cartão',
-                  icon: Icons.credit_card_rounded,
-                  validator: (v) =>
-                      (v == null || v.trim().isEmpty) ? 'Informe o nome' : null,
-                ),
-                const Gap(12),
-
-                // Banco
-                _SheetField(
-                  controller: bankController,
-                  label: 'Banco (ex: nubank, itau)',
-                  icon: Icons.account_balance_rounded,
-                  validator: (v) => (v == null || v.trim().isEmpty)
-                      ? 'Informe o banco'
-                      : null,
-                ),
-                const Gap(12),
-
-                // Limite
-                _SheetField(
-                  controller: limitController,
-                  label: 'Limite',
-                  icon: Icons.payments_rounded,
-                  prefixText: 'R\$ ',
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [limitMask],
-                  validator: (v) {
-                    if (v == null || v.isEmpty) return 'Informe o limite';
-                    if (InputMasks.currencyToCents(v) <= 0) {
-                      return 'Limite deve ser maior que zero';
-                    }
-                    return null;
-                  },
-                ),
-                const Gap(12),
-
-                // Dias — lado a lado com validação de 1–31
-                Row(
-                  children: [
-                    Expanded(
-                      child: _SheetField(
-                        controller: closingController,
-                        label: 'Dia fechamento',
-                        icon: Icons.event_rounded,
-                        keyboardType: TextInputType.number,
-                        // Limita a 2 dígitos e só números
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          LengthLimitingTextInputFormatter(2),
-                        ],
-                        validator: _validateDay,
-                      ),
-                    ),
-                    const Gap(12),
-                    Expanded(
-                      child: _SheetField(
-                        controller: dueController,
-                        label: 'Dia vencimento',
-                        icon: Icons.event_available_rounded,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          LengthLimitingTextInputFormatter(2),
-                        ],
-                        validator: _validateDay,
-                      ),
-                    ),
-                  ],
-                ),
-                const Gap(24),
-
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: colorScheme.primary,
-                      foregroundColor: colorScheme.onPrimary,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(AppTheme.radiusChip)),
-                    ),
-                    onPressed: () async {
-                      if (!formKey.currentState!.validate()) return;
-
-                      final limitValue =
-                          InputMasks.currencyToCents(limitController.text);
-                      final closingDay =
-                          int.parse(closingController.text.trim());
-                      final dueDay = int.parse(dueController.text.trim());
-
-                      if (isEdit) {
-                        final updated = CreditCards(
-                          id: existing.id,
-                          name: nameController.text.trim(),
-                          totalLimitCents: limitValue,
-                          closingDay: closingDay,
-                          dueDay: dueDay,
-                          colorHex: existing.colorHex,
-                          bankKeyword: bankController.text.trim().toLowerCase(),
-                        );
-                        await DatabaseHelper.instance
-                            .updateCreditCards(updated);
-                      } else {
-                        final newCard = CreditCards(
-                          name: nameController.text.trim(),
-                          totalLimitCents: limitValue,
-                          closingDay: closingDay,
-                          dueDay: dueDay,
-                          bankKeyword: bankController.text.trim().toLowerCase(),
-                        );
-                        await DatabaseHelper.instance
-                            .insertCreditCards(newCard);
-                      }
-
-                      ref.invalidate(creditCardProvider);
-                      // Atualiza o limite exibido imediatamente sem esperar nova transação
-                      if (isEdit && existing.id != null) {
-                        ref.invalidate(cardLimitDetailsProvider(existing.id!));
-                      }
-                      if (ctx.mounted) Navigator.pop(ctx);
-                    },
-                    child: Text(
-                      isEdit ? 'Salvar alterações' : 'Adicionar cartão',
-                      style: TextStyle(
-                            fontWeight: FontWeight.w600, fontSize: 15)
-                    ),
-                  ),
-                ),
-              ],
+    final sheetContent = Padding(
+      padding: isDesktop
+          ? const EdgeInsets.all(24)
+          : EdgeInsets.only(
+              left: AppTheme.paddingScreen,
+              right: AppTheme.paddingScreen,
+              top: 20,
+              bottom: 24,
             ),
+      child: Form(
+        key: formKey,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (!isDesktop) _SheetHandle(),
+              Text(
+                isEdit ? 'Editar cartão' : 'Adicionar cartão',
+                style: AppTheme.titleStyle(context, fontSize: 18),
+              ),
+              const Gap(4),
+              Text(
+                isEdit
+                    ? 'Altere os dados do cartão'
+                    : 'Preencha os dados do cartão',
+                style: AppTheme.subtitleStyle(
+                  context,
+                  fontSize: 13,
+                  color: colorScheme.onSurface.withAlpha(140),
+                ),
+              ),
+              const Gap(20),
+
+              // Nome
+              _SheetField(
+                controller: nameController,
+                label: 'Nome do cartão',
+                icon: Icons.credit_card_rounded,
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'Informe o nome' : null,
+              ),
+              const Gap(12),
+
+              // Banco
+              _SheetField(
+                controller: bankController,
+                label: 'Banco (ex: nubank, itau)',
+                icon: Icons.account_balance_rounded,
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'Informe o banco' : null,
+              ),
+              const Gap(12),
+
+              // Limite
+              _SheetField(
+                controller: limitController,
+                label: 'Limite',
+                icon: Icons.payments_rounded,
+                prefixText: 'R\$ ',
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [limitMask],
+                validator: (v) {
+                  if (v == null || v.isEmpty) return 'Informe o limite';
+                  if (InputMasks.currencyToCents(v) <= 0) {
+                    return 'Limite deve ser maior que zero';
+                  }
+                  return null;
+                },
+              ),
+              const Gap(12),
+
+              // Dias — lado a lado com validação de 1–31
+              Row(
+                children: [
+                  Expanded(
+                    child: _SheetField(
+                      controller: closingController,
+                      label: 'Dia fechamento',
+                      icon: Icons.event_rounded,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(2),
+                      ],
+                      validator: _validateDay,
+                    ),
+                  ),
+                  const Gap(12),
+                  Expanded(
+                    child: _SheetField(
+                      controller: dueController,
+                      label: 'Dia vencimento',
+                      icon: Icons.event_available_rounded,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(2),
+                      ],
+                      validator: _validateDay,
+                    ),
+                  ),
+                ],
+              ),
+              const Gap(24),
+
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: colorScheme.primary,
+                    foregroundColor: colorScheme.onPrimary,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                        borderRadius:
+                            BorderRadius.circular(AppTheme.radiusChip)),
+                  ),
+                  onPressed: () async {
+                    if (!formKey.currentState!.validate()) return;
+
+                    final limitValue =
+                        InputMasks.currencyToCents(limitController.text);
+                    final closingDay = int.parse(closingController.text.trim());
+                    final dueDay = int.parse(dueController.text.trim());
+
+                    if (isEdit) {
+                      final updated = CreditCards(
+                        id: existing.id,
+                        name: nameController.text.trim(),
+                        totalLimitCents: limitValue,
+                        closingDay: closingDay,
+                        dueDay: dueDay,
+                        colorHex: existing.colorHex,
+                        bankKeyword: bankController.text.trim().toLowerCase(),
+                      );
+                      await DatabaseHelper.instance.updateCreditCards(updated);
+                    } else {
+                      final newCard = CreditCards(
+                        name: nameController.text.trim(),
+                        totalLimitCents: limitValue,
+                        closingDay: closingDay,
+                        dueDay: dueDay,
+                        bankKeyword: bankController.text.trim().toLowerCase(),
+                      );
+                      await DatabaseHelper.instance.insertCreditCards(newCard);
+                    }
+
+                    ref.invalidate(creditCardProvider);
+                    if (isEdit && existing.id != null) {
+                      ref.invalidate(cardLimitDetailsProvider(existing.id!));
+                    }
+                    if (context.mounted) Navigator.pop(context);
+                  },
+                  child: Text(isEdit ? 'Salvar alterações' : 'Adicionar cartão',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 15)),
+                ),
+              ),
+            ],
           ),
         ),
       ),
     );
+
+    if (isDesktop) {
+      showDialog(
+        context: context,
+        builder: (_) => Dialog(
+          backgroundColor: colorScheme.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTheme.radiusModal),
+          ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 460),
+            child: sheetContent,
+          ),
+        ),
+      );
+    } else {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: colorScheme.surface,
+        shape: const RoundedRectangleBorder(
+          borderRadius:
+              BorderRadius.vertical(top: Radius.circular(AppTheme.radiusModal)),
+        ),
+        builder: (ctx) => Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+          ),
+          child: sheetContent,
+        ),
+      );
+    }
   }
 
   /// Valida se o dia informado está entre 1 e 31
@@ -377,24 +397,50 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
       body: cardsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erro: $e')),
-        data: (cards) => cards.isEmpty
-            ? _buildEmpty(colorScheme)
-            : ListView(
+        data: (cards) {
+          if (cards.isEmpty) return _buildEmpty(colorScheme);
+          final isDesktop = Responsive.isDesktop(context);
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final halfWidth = (constraints.maxWidth -
+                      AppTheme.paddingScreen * 2 -
+                      Responsive.gridSpacing) /
+                  2;
+              return ListView(
                 padding: const EdgeInsets.fromLTRB(
                     AppTheme.paddingScreen, 8, AppTheme.paddingScreen, 100),
                 children: [
-                  // Cartões visuais
-                  for (final card in cards)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: _CreditCardWidget(
-                        card: card,
-                        baseColor: _cardColor(card),
-                        darkColor: _darken(_cardColor(card)),
-                        onEdit: () => _showCardSheet(existing: card),
-                        onDelete: () => _showDeleteConfirm(card),
+                  // Cartões visuais — grid de 2 colunas no desktop
+                  if (isDesktop)
+                    Wrap(
+                      spacing: Responsive.gridSpacing,
+                      runSpacing: Responsive.gridSpacing,
+                      children: [
+                        for (final card in cards)
+                          SizedBox(
+                            width: halfWidth,
+                            child: _CreditCardWidget(
+                              card: card,
+                              baseColor: _cardColor(card),
+                              darkColor: _darken(_cardColor(card)),
+                              onEdit: () => _showCardSheet(existing: card),
+                              onDelete: () => _showDeleteConfirm(card),
+                            ),
+                          ),
+                      ],
+                    )
+                  else
+                    for (final card in cards)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: _CreditCardWidget(
+                          card: card,
+                          baseColor: _cardColor(card),
+                          darkColor: _darken(_cardColor(card)),
+                          onEdit: () => _showCardSheet(existing: card),
+                          onDelete: () => _showDeleteConfirm(card),
+                        ),
                       ),
-                    ),
 
                   const Gap(8),
                   Text(
@@ -408,11 +454,28 @@ class _CardsScreenState extends ConsumerState<CardsScreen> {
                   ),
                   const Gap(10),
 
-                  // Tiles de resumo
-                  for (final card in cards)
-                    _CardSummaryTile(card: card, baseColor: _cardColor(card)),
+                  // Tiles de resumo — grid no desktop
+                  if (isDesktop)
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        for (final card in cards)
+                          SizedBox(
+                            width: halfWidth,
+                            child: _CardSummaryTile(
+                                card: card, baseColor: _cardColor(card)),
+                          ),
+                      ],
+                    )
+                  else
+                    for (final card in cards)
+                      _CardSummaryTile(card: card, baseColor: _cardColor(card)),
                 ],
-              ),
+              );
+            },
+          );
+        },
       ),
     );
   }
@@ -667,7 +730,6 @@ class _CreditCardWidget extends ConsumerWidget {
 
                 const Gap(10),
 
-                
                 Row(
                   children: [
                     _CardInfoPill(

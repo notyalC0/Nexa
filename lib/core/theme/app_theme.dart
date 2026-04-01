@@ -113,6 +113,23 @@ class AppTheme {
         errorColor: errorColor,
         labelColor: Color(0xFF6B7280),
       ),
+      navigationRailTheme: NavigationRailThemeData(
+        backgroundColor: cardColor,
+        indicatorColor: primaryColor.withAlpha(25),
+        selectedIconTheme: const IconThemeData(color: primaryColor, size: 22),
+        unselectedIconTheme: IconThemeData(color: textSecondary, size: 22),
+        selectedLabelTextStyle: const TextStyle(
+          color: primaryColor,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+        unselectedLabelTextStyle: TextStyle(
+          color: textSecondary,
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+        ),
+        labelType: NavigationRailLabelType.all,
+      ),
     );
   }
 
@@ -180,6 +197,24 @@ class AppTheme {
         focusColor: accentColor,
         errorColor: errorColor,
         labelColor: Color(0xFF9CA3AF),
+      ),
+      navigationRailTheme: NavigationRailThemeData(
+        backgroundColor: darkCard,
+        indicatorColor: accentColor.withAlpha(25),
+        selectedIconTheme: const IconThemeData(color: accentColor, size: 22),
+        unselectedIconTheme:
+            const IconThemeData(color: Color(0xFFB8C0CC), size: 22),
+        selectedLabelTextStyle: const TextStyle(
+          color: accentColor,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+        unselectedLabelTextStyle: const TextStyle(
+          color: Color(0xFFB8C0CC),
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+        ),
+        labelType: NavigationRailLabelType.all,
       ),
     );
   }
@@ -496,4 +531,22 @@ class AppTheme {
       alignLabelWithHint: alignLabelWithHint,
     );
   }
+
+  // ─── Cores semânticas adaptáveis ao tema ──────────────────────────────
+
+  /// Verde para receita / sucesso — mais escuro em light para manter contraste.
+  /// Light: #16A34A (contrast ~3.5:1 on white — AA large text)
+  /// Dark:  #2ECC71 (contrast ~8.2:1 on dark bg — AAA)
+  static Color incomeColor(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark
+          ? const Color(0xFF2ECC71)
+          : const Color(0xFF16A34A);
+
+  /// Vermelho para despesa / erro — mais escuro em light para manter contraste.
+  /// Light: #DC2626 (contrast ~4.5:1 on white — AA)
+  /// Dark:  redAccent (contrast ~5.8:1 on dark bg — AAA)
+  static Color expenseColor(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark
+          ? Colors.redAccent
+          : const Color(0xFFDC2626);
 }

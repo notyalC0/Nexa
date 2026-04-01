@@ -10,6 +10,7 @@ import 'package:nexa/core/notifications/notification_service.dart';
 import 'package:nexa/core/theme/app_theme.dart';
 import 'package:nexa/core/utils/currency_formatter.dart';
 import 'package:nexa/core/utils/input_masks.dart';
+import 'package:nexa/core/utils/responsive.dart';
 import 'package:nexa/features/cards/providers/cards_provider.dart';
 import 'package:nexa/features/home/provider/balance_provider.dart';
 import 'package:nexa/features/home/provider/health_score_provider.dart';
@@ -180,98 +181,125 @@ class SettingsScreen extends ConsumerWidget {
     final currencyMask = InputMasks.currency();
     final formKey = GlobalKey<FormState>();
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-          left: AppTheme.paddingScreen,
-          right: AppTheme.paddingScreen,
-          top: 20,
-          bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-        ),
-        child: Form(
-          key: formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _sheetHandle(cs),
-                Text(
-                  title,
-                  style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: cs.onSurface),
-                ),
-                const Gap(6),
-                Text(
-                  'Digite um valor',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: cs.onSurface.withAlpha(153),
-                    height: 1.45,
-                  ),
-                ),
-                const Gap(16),
-                TextFormField(
-                  controller: controller,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [currencyMask],
-                  autofocus: true,
-                  style: AppTheme.inputTextStyle(
-                    context,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  cursorColor: cs.primary,
-                  decoration: AppTheme.inputDecoration(
-                    context,
-                    label: 'Valor',
-                    prefixText: 'R\$ ',
-                  ),
-                  validator: (v) {
-                    if (v == null || v.isEmpty) return 'Informe um valor';
-                    if (InputMasks.currencyToCents(v) <= 0) {
-                      return 'O valor deve ser maior que zero';
-                    }
-                    return null;
-                  },
-                ),
-                const Gap(16),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: cs.primary,
-                      foregroundColor: cs.onPrimary,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(AppTheme.radiusChip)),
-                    ),
-                    onPressed: () async {
-                      if (!formKey.currentState!.validate()) return;
-                      final cents = InputMasks.currencyToCents(controller.text);
-                      await ref
-                          .read(appSettingsProvider.notifier)
-                          .saveMoneySetting(key, cents);
-                      ref.invalidate(healthScoreProvider);
-                      if (ctx.mounted) Navigator.pop(ctx);
-                    },
-                    child: const Text('Salvar',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w600, fontSize: 15)),
-                  ),
-                ),
-              ],
+    final isDesktop = Responsive.useNavRail(context);
+
+    final sheetContent = Padding(
+      padding: isDesktop
+          ? const EdgeInsets.all(24)
+          : EdgeInsets.only(
+              left: AppTheme.paddingScreen,
+              right: AppTheme.paddingScreen,
+              top: 20,
+              bottom: 24,
             ),
+      child: Form(
+        key: formKey,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (!isDesktop) _sheetHandle(cs),
+              Text(
+                title,
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: cs.onSurface),
+              ),
+              const Gap(6),
+              Text(
+                'Digite um valor',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: cs.onSurface.withAlpha(153),
+                  height: 1.45,
+                ),
+              ),
+              const Gap(16),
+              TextFormField(
+                controller: controller,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [currencyMask],
+                autofocus: true,
+                style: AppTheme.inputTextStyle(
+                  context,
+                  fontWeight: FontWeight.w600,
+                ),
+                cursorColor: cs.primary,
+                decoration: AppTheme.inputDecoration(
+                  context,
+                  label: 'Valor',
+                  prefixText: 'R\$ ',
+                ),
+                validator: (v) {
+                  if (v == null || v.isEmpty) return 'Informe um valor';
+                  if (InputMasks.currencyToCents(v) <= 0) {
+                    return 'O valor deve ser maior que zero';
+                  }
+                  return null;
+                },
+              ),
+              const Gap(16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: cs.primary,
+                    foregroundColor: cs.onPrimary,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius:
+                            BorderRadius.circular(AppTheme.radiusChip)),
+                  ),
+                  onPressed: () async {
+                    if (!formKey.currentState!.validate()) return;
+                    final cents = InputMasks.currencyToCents(controller.text);
+                    await ref
+                        .read(appSettingsProvider.notifier)
+                        .saveMoneySetting(key, cents);
+                    ref.invalidate(healthScoreProvider);
+                    if (context.mounted) Navigator.pop(context);
+                  },
+                  child: const Text('Salvar',
+                      style:
+                          TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                ),
+              ),
+            ],
           ),
         ),
       ),
     );
+
+    if (isDesktop) {
+      showDialog(
+        context: context,
+        builder: (_) => Dialog(
+          backgroundColor: cs.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTheme.radiusModal),
+          ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: sheetContent,
+          ),
+        ),
+      );
+    } else {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        builder: (ctx) => Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+          ),
+          child: sheetContent,
+        ),
+      );
+    }
   }
 
   Future<void> _showManageCategoriesDialog(
@@ -544,174 +572,183 @@ class SettingsScreen extends ConsumerWidget {
                 fontSize: 20, fontWeight: FontWeight.w700, color: cs.onSurface),
           ),
         ),
-        body: ListView(
-          padding: const EdgeInsets.fromLTRB(
-              AppTheme.paddingScreen, 8, AppTheme.paddingScreen, 40),
-          children: [
-            // ── Perfil ──────────────────────────────────────────────
-            const _ProfileCard(),
-            const Gap(24),
+        body: Center(
+          child: ConstrainedBox(
+            constraints:
+                const BoxConstraints(maxWidth: Responsive.maxFormWidth),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(
+                  AppTheme.paddingScreen, 8, AppTheme.paddingScreen, 40),
+              children: [
+                // ── Perfil ──────────────────────────────────────────────
+                const _ProfileCard(),
+                const Gap(24),
 
-            // ── Finanças ────────────────────────────────────────────
-            const SettingsSectionHeader(label: 'Finanças'),
-            const Gap(10),
-            SettingsTile(
-              icon: Icons.account_balance_wallet_rounded,
-              title: 'Salário mensal',
-              subtitle: settings.salaryCents == 0
-                  ? 'Não configurado'
-                  : CurrencyFormatter.format(settings.salaryCents),
-              trailing: Icon(Icons.chevron_right_rounded,
-                  color: cs.onSurface.withAlpha(89)),
-              onTap: () => _showFinancialSheet(
-                context,
-                ref,
-                'monthly_salary_cents',
-                'Salário mensal',
-                settings.salaryCents,
-              ),
-            ),
-            SettingsTile(
-              icon: Icons.savings_rounded,
-              title: 'Meta da reserva de emergência',
-              subtitle: settings.emergencyGoalCents == 0
-                  ? 'Não configurado'
-                  : CurrencyFormatter.format(settings.emergencyGoalCents),
-              trailing: Icon(Icons.chevron_right_rounded,
-                  color: cs.onSurface.withAlpha(89)),
-              onTap: () => _showFinancialSheet(
-                context,
-                ref,
-                'emergency_goal_cents',
-                'Meta da reserva',
-                settings.emergencyGoalCents,
-              ),
-            ),
-            SettingsTile(
-              icon: Icons.savings_outlined,
-              title: 'Reserva atual',
-              subtitle: settings.emergencyCurrentCents == 0
-                  ? 'Não configurado'
-                  : CurrencyFormatter.format(settings.emergencyCurrentCents),
-              trailing: Icon(Icons.chevron_right_rounded,
-                  color: cs.onSurface.withAlpha(89)),
-              onTap: () => _showFinancialSheet(
-                context,
-                ref,
-                'emergency_current_cents',
-                'Reserva atual',
-                settings.emergencyCurrentCents,
-              ),
-            ),
-            const Gap(24),
+                // ── Finanças ────────────────────────────────────────────
+                const SettingsSectionHeader(label: 'Finanças'),
+                const Gap(10),
+                SettingsTile(
+                  icon: Icons.account_balance_wallet_rounded,
+                  title: 'Salário mensal',
+                  subtitle: settings.salaryCents == 0
+                      ? 'Não configurado'
+                      : CurrencyFormatter.format(settings.salaryCents),
+                  trailing: Icon(Icons.chevron_right_rounded,
+                      color: cs.onSurface.withAlpha(89)),
+                  onTap: () => _showFinancialSheet(
+                    context,
+                    ref,
+                    'monthly_salary_cents',
+                    'Salário mensal',
+                    settings.salaryCents,
+                  ),
+                ),
+                SettingsTile(
+                  icon: Icons.savings_rounded,
+                  title: 'Meta da reserva de emergência',
+                  subtitle: settings.emergencyGoalCents == 0
+                      ? 'Não configurado'
+                      : CurrencyFormatter.format(settings.emergencyGoalCents),
+                  trailing: Icon(Icons.chevron_right_rounded,
+                      color: cs.onSurface.withAlpha(89)),
+                  onTap: () => _showFinancialSheet(
+                    context,
+                    ref,
+                    'emergency_goal_cents',
+                    'Meta da reserva',
+                    settings.emergencyGoalCents,
+                  ),
+                ),
+                SettingsTile(
+                  icon: Icons.savings_outlined,
+                  title: 'Reserva atual',
+                  subtitle: settings.emergencyCurrentCents == 0
+                      ? 'Não configurado'
+                      : CurrencyFormatter.format(
+                          settings.emergencyCurrentCents),
+                  trailing: Icon(Icons.chevron_right_rounded,
+                      color: cs.onSurface.withAlpha(89)),
+                  onTap: () => _showFinancialSheet(
+                    context,
+                    ref,
+                    'emergency_current_cents',
+                    'Reserva atual',
+                    settings.emergencyCurrentCents,
+                  ),
+                ),
+                const Gap(24),
 
-            // ── Aparência ────────────────────────────────────────────
-            const SettingsSectionHeader(label: 'Aparência'),
-            const Gap(10),
-            SettingsTile(
-              icon: Icons.dark_mode_rounded,
-              title: 'Modo escuro',
-              subtitle: 'Ativar tema escuro no app',
-              trailing: Switch(
-                value: settings.darkMode,
-                onChanged: (v) => ref
-                    .read(appSettingsProvider.notifier)
-                    .saveBoolSetting('dark_mode', v),
-              ),
-            ),
-            const Gap(24),
+                // ── Aparência ────────────────────────────────────────────
+                const SettingsSectionHeader(label: 'Aparência'),
+                const Gap(10),
+                SettingsTile(
+                  icon: Icons.dark_mode_rounded,
+                  title: 'Modo escuro',
+                  subtitle: 'Ativar tema escuro no app',
+                  trailing: Switch(
+                    value: settings.darkMode,
+                    onChanged: (v) => ref
+                        .read(appSettingsProvider.notifier)
+                        .saveBoolSetting('dark_mode', v),
+                  ),
+                ),
+                const Gap(24),
 
-            // ── Notificações ─────────────────────────────────────────
-            const SettingsSectionHeader(label: 'Notificações'),
-            const Gap(10),
-            SettingsTile(
-              icon: Icons.notifications_rounded,
-              title: 'Notificações',
-              subtitle: 'Alertas diários para registrar seus gastos',
-              trailing: Switch(
-                value: settings.notificationsEnabled,
-                onChanged: (v) async {
-                  await ref
-                      .read(appSettingsProvider.notifier)
-                      .saveBoolSetting('notifications_enabled', v);
-                  if (v) {
-                    final granted =
-                        await NotificationService.instance.requestPermissions();
-                    if (granted) {
-                      await NotificationService.instance.scheduleDailyReminder(
-                        hour: settings.reminderHour,
-                        minute: settings.reminderMinute,
-                      );
-                    } else if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        AppTheme.snackBar(
-                          context,
-                          message:
-                              'Permissão negada. Habilite nas configurações do sistema.',
-                          icon: Icons.notifications_off_rounded,
-                        ),
-                      );
-                    }
-                  } else {
-                    await NotificationService.instance.cancelDailyReminder();
-                  }
-                },
-              ),
-            ),
-            if (settings.notificationsEnabled) ...[
-              const Gap(2),
-              SettingsTile(
-                icon: Icons.access_time_rounded,
-                title: 'Horário do lembrete',
-                subtitle:
-                    'Diariamente às ${settings.reminderHour.toString().padLeft(2, '0')}:${settings.reminderMinute.toString().padLeft(2, '0')}',
-                trailing: Icon(Icons.chevron_right_rounded,
-                    color: cs.onSurface.withAlpha(89)),
-                onTap: () => _showTimePicker(context, ref, settings),
-              ),
-            ],
-            const Gap(24),
+                // ── Notificações ─────────────────────────────────────────
+                const SettingsSectionHeader(label: 'Notificações'),
+                const Gap(10),
+                SettingsTile(
+                  icon: Icons.notifications_rounded,
+                  title: 'Notificações',
+                  subtitle: 'Alertas diários para registrar seus gastos',
+                  trailing: Switch(
+                    value: settings.notificationsEnabled,
+                    onChanged: (v) async {
+                      await ref
+                          .read(appSettingsProvider.notifier)
+                          .saveBoolSetting('notifications_enabled', v);
+                      if (v) {
+                        final granted = await NotificationService.instance
+                            .requestPermissions();
+                        if (granted) {
+                          await NotificationService.instance
+                              .scheduleDailyReminder(
+                            hour: settings.reminderHour,
+                            minute: settings.reminderMinute,
+                          );
+                        } else if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            AppTheme.snackBar(
+                              context,
+                              message:
+                                  'Permissão negada. Habilite nas configurações do sistema.',
+                              icon: Icons.notifications_off_rounded,
+                            ),
+                          );
+                        }
+                      } else {
+                        await NotificationService.instance
+                            .cancelDailyReminder();
+                      }
+                    },
+                  ),
+                ),
+                if (settings.notificationsEnabled) ...[
+                  const Gap(2),
+                  SettingsTile(
+                    icon: Icons.access_time_rounded,
+                    title: 'Horário do lembrete',
+                    subtitle:
+                        'Diariamente às ${settings.reminderHour.toString().padLeft(2, '0')}:${settings.reminderMinute.toString().padLeft(2, '0')}',
+                    trailing: Icon(Icons.chevron_right_rounded,
+                        color: cs.onSurface.withAlpha(89)),
+                    onTap: () => _showTimePicker(context, ref, settings),
+                  ),
+                ],
+                const Gap(24),
 
-            // ── Categorias ────────────────────────────────────────────
-            const SettingsSectionHeader(label: 'Categorias'),
-            const Gap(10),
-            SettingsTile(
-              icon: Icons.category_rounded,
-              title: 'Adicionar categoria',
-              subtitle: 'Crie categorias personalizadas para transações',
-              trailing: Icon(Icons.chevron_right_rounded,
-                  color: cs.onSurface.withAlpha(89)),
-              onTap: () => _showManageCategoriesDialog(context, ref),
-            ),
-            const Gap(24),
+                // ── Categorias ────────────────────────────────────────────
+                const SettingsSectionHeader(label: 'Categorias'),
+                const Gap(10),
+                SettingsTile(
+                  icon: Icons.category_rounded,
+                  title: 'Adicionar categoria',
+                  subtitle: 'Crie categorias personalizadas para transações',
+                  trailing: Icon(Icons.chevron_right_rounded,
+                      color: cs.onSurface.withAlpha(89)),
+                  onTap: () => _showManageCategoriesDialog(context, ref),
+                ),
+                const Gap(24),
 
-            // ── Dados ─────────────────────────────────────────────────
-            const SettingsSectionHeader(label: 'Dados'),
-            const Gap(10),
-            SettingsTile(
-              icon: Icons.delete_forever_rounded,
-              title: 'Apagar todos os dados',
-              subtitle: 'Remove todas as transações e cartões',
-              iconColor: cs.error,
-              titleColor: cs.error,
-              trailing: Icon(Icons.chevron_right_rounded,
-                  color: cs.error.withAlpha(127)),
-              onTap: () => _showClearDataConfirm(context, ref),
-            ),
-            const Gap(24),
+                // ── Dados ─────────────────────────────────────────────────
+                const SettingsSectionHeader(label: 'Dados'),
+                const Gap(10),
+                SettingsTile(
+                  icon: Icons.delete_forever_rounded,
+                  title: 'Apagar todos os dados',
+                  subtitle: 'Remove todas as transações e cartões',
+                  iconColor: cs.error,
+                  titleColor: cs.error,
+                  trailing: Icon(Icons.chevron_right_rounded,
+                      color: cs.error.withAlpha(127)),
+                  onTap: () => _showClearDataConfirm(context, ref),
+                ),
+                const Gap(24),
 
-            // ── Sobre ──────────────────────────────────────────────────
-            const SettingsSectionHeader(label: 'Sobre'),
-            const Gap(10),
-            SettingsTile(
-              icon: Icons.info_outline_rounded,
-              title: 'Sobre o Nexa',
-              subtitle: 'Versão 1.3.0',
-              trailing: Icon(Icons.chevron_right_rounded,
-                  color: cs.onSurface.withAlpha(89)),
-              onTap: () => _showAboutDialog(context),
+                // ── Sobre ──────────────────────────────────────────────────
+                const SettingsSectionHeader(label: 'Sobre'),
+                const Gap(10),
+                SettingsTile(
+                  icon: Icons.info_outline_rounded,
+                  title: 'Sobre o Nexa',
+                  subtitle: 'Versão 1.3.0',
+                  trailing: Icon(Icons.chevron_right_rounded,
+                      color: cs.onSurface.withAlpha(89)),
+                  onTap: () => _showAboutDialog(context),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

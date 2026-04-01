@@ -80,13 +80,14 @@ class _TransactionCardState extends State<TransactionCard>
   // ─── Helpers visuais ──────────────────────────────────────────────────────
 
   Color _typeColor() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     switch (widget.transaction.type) {
       case 'income':
-        return const Color(0xFF2ECC71);
+        return isDark ? const Color(0xFF2ECC71) : const Color(0xFF16A34A);
       case 'investment':
         return Colors.blueAccent;
       default:
-        return Colors.redAccent;
+        return isDark ? Colors.redAccent : const Color(0xFFDC2626);
     }
   }
 

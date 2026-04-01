@@ -7,6 +7,7 @@ import 'package:gap/gap.dart';
 import 'package:nexa/core/database/database_helper.dart';
 import 'package:nexa/core/theme/app_theme.dart';
 import 'package:nexa/core/utils/currency_formatter.dart';
+import 'package:nexa/core/utils/responsive.dart';
 import 'package:nexa/core/widgets/app_shimmer.dart';
 import 'package:nexa/features/cards/providers/cards_provider.dart';
 import 'package:nexa/features/cards/screens/card_screen.dart';
@@ -46,19 +47,40 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isWide = Responsive.useNavRail(context);
+
+    final pages = IndexedStack(
+      index: _currentIndex,
+      children: const [
+        _HomePage(),
+        CardsScreen(),
+        InsightsScreen(),
+        SettingsScreen(),
+      ],
+    );
+
+    // Desktop / Tablet: Sidebar + conteúdo com largura limitada
+    if (isWide) {
+      return Scaffold(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        body: Row(
+          children: [
+            _DesktopSidebar(
+              currentIndex: _currentIndex,
+              onTap: (i) => setState(() => _currentIndex = i),
+            ),
+            Expanded(child: pages),
+          ],
+        ),
+      );
+    }
+
+    // Mobile: BottomNavigationBar
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
         backgroundColor: Theme.of(context).colorScheme.surface,
-        body: IndexedStack(
-          index: _currentIndex,
-          children: const [
-            _HomePage(),
-            CardsScreen(),
-            InsightsScreen(),
-            SettingsScreen(),
-          ],
-        ),
+        body: pages,
         bottomNavigationBar: _BottomNavBar(
           currentIndex: _currentIndex,
           onTap: (i) => setState(() => _currentIndex = i),
@@ -311,41 +333,53 @@ class _HomeHeader extends ConsumerWidget {
     final titleText =
         '$selectedCount selecionada${selectedCount > 1 ? 's' : ''}';
 
+    final useNavRail = Responsive.useNavRail(context);
+    final headerBg = useNavRail ? cs.surface : cs.primary;
+    final headerFg = useNavRail ? cs.onSurface : cs.onPrimary;
+
     return SliverAppBar(
-      expandedHeight: 250,
+      expandedHeight: useNavRail ? 110 : 250,
       pinned: true,
       elevation: 0,
-      scrolledUnderElevation: 4,
+      scrolledUnderElevation: useNavRail ? 1 : 4,
       surfaceTintColor: Colors.transparent,
-      shadowColor: Colors.black.withAlpha(60),
-      backgroundColor: cs.primary,
-      systemOverlayStyle: SystemUiOverlayStyle.light,
+      shadowColor: Colors.black.withAlpha(useNavRail ? 15 : 60),
+      backgroundColor: headerBg,
+      systemOverlayStyle: useNavRail
+          ? (Theme.of(context).brightness == Brightness.dark
+              ? SystemUiOverlayStyle.light
+              : SystemUiOverlayStyle.dark)
+          : SystemUiOverlayStyle.light,
       centerTitle: false,
-      leading: AnimatedSwitcher(
-        duration: _selectionTransitionDuration,
-        switchInCurve: Curves.easeOutCubic,
-        switchOutCurve: Curves.easeInCubic,
-        transitionBuilder: (child, animation) => FadeTransition(
-          opacity: animation,
-          child: ScaleTransition(
-            scale: Tween<double>(begin: 0.85, end: 1).animate(animation),
-            child: child,
-          ),
-        ),
-        child: selectionMode
-            ? IconButton(
-                key: const ValueKey('selection_close'),
-                tooltip: 'Cancelar seleção',
-                onPressed: () =>
-                    ref.read(selectedTransactionIdsProvider.notifier).clear(),
-                icon: Icon(Icons.close_rounded, color: cs.onPrimary),
-              )
-            : Padding(
-                key: const ValueKey('normal_logo'),
-                padding: const EdgeInsets.all(10),
-                child: _UserAvatar(size: 30),
+      automaticallyImplyLeading: false,
+      leading: useNavRail
+          ? null
+          : AnimatedSwitcher(
+              duration: _selectionTransitionDuration,
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              transitionBuilder: (child, animation) => FadeTransition(
+                opacity: animation,
+                child: ScaleTransition(
+                  scale: Tween<double>(begin: 0.85, end: 1).animate(animation),
+                  child: child,
+                ),
               ),
-      ),
+              child: selectionMode
+                  ? IconButton(
+                      key: const ValueKey('selection_close'),
+                      tooltip: 'Cancelar seleção',
+                      onPressed: () => ref
+                          .read(selectedTransactionIdsProvider.notifier)
+                          .clear(),
+                      icon: Icon(Icons.close_rounded, color: headerFg),
+                    )
+                  : Padding(
+                      key: const ValueKey('normal_logo'),
+                      padding: const EdgeInsets.all(10),
+                      child: _UserAvatar(size: 30),
+                    ),
+            ),
       title: AnimatedSwitcher(
         duration: _selectionTransitionDuration,
         switchInCurve: Curves.easeOutCubic,
@@ -367,17 +401,17 @@ class _HomeHeader extends ConsumerWidget {
                 style: AppTheme.titleStyle(
                   context,
                   fontSize: 16,
-                  color: cs.onPrimary,
+                  color: headerFg,
                   fontWeight: FontWeight.w700,
                 ),
               )
             : Text(
-                'Nexa',
-                key: const ValueKey('normal_title'),
+                useNavRail ? greetingWithName : 'Nexa',
+                key: ValueKey(useNavRail ? 'desktop_title' : 'normal_title'),
                 style: TextStyle(
-                  color: cs.onPrimary,
-                  fontSize: 21,
-                  fontWeight: FontWeight.w800,
+                  color: headerFg,
+                  fontSize: useNavRail ? 17 : 21,
+                  fontWeight: useNavRail ? FontWeight.w600 : FontWeight.w800,
                   letterSpacing: -0.5,
                 ),
               ),
@@ -399,7 +433,7 @@ class _HomeHeader extends ConsumerWidget {
                   key: const ValueKey('selection_delete'),
                   tooltip: 'Excluir selecionadas',
                   onPressed: () => _deleteSelected(context, ref),
-                  icon: Icon(Icons.delete_outline_rounded, color: cs.onPrimary),
+                  icon: Icon(Icons.delete_outline_rounded, color: headerFg),
                 )
               : const SizedBox.shrink(key: ValueKey('normal_actions_hidden')),
         ),
@@ -411,10 +445,9 @@ class _HomeHeader extends ConsumerWidget {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [
-                cs.primary,
-                Color.lerp(cs.primary, Colors.black, 0.14)!,
-              ],
+              colors: useNavRail
+                  ? [headerBg, headerBg]
+                  : [cs.primary, Color.lerp(cs.primary, Colors.black, 0.14)!],
             ),
           ),
           padding: const EdgeInsets.fromLTRB(
@@ -457,7 +490,7 @@ class _HomeHeader extends ConsumerWidget {
                           Text(
                             '$selectedCount',
                             style: TextStyle(
-                              color: cs.onPrimary,
+                              color: headerFg,
                               fontSize: 56,
                               fontWeight: FontWeight.w800,
                               letterSpacing: -2,
@@ -468,7 +501,7 @@ class _HomeHeader extends ConsumerWidget {
                           Text(
                             'Toque na lixeira para excluir em lote',
                             style: TextStyle(
-                              color: cs.onPrimary.withAlpha(140),
+                              color: headerFg.withAlpha(140),
                               fontSize: 12,
                             ),
                           ),
@@ -483,108 +516,199 @@ class _HomeHeader extends ConsumerWidget {
                       mainAxisAlignment: MainAxisAlignment.end,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Text(
-                              greetingWithName,
-                              style: TextStyle(
-                                color: cs.onPrimary.withAlpha(179),
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                letterSpacing: 0.1,
+                        if (!useNavRail) ...[
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Text(
+                                greetingWithName,
+                                style: TextStyle(
+                                  color: headerFg.withAlpha(179),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  letterSpacing: 0.1,
+                                ),
                               ),
-                            ),
-                            IconButton(
-                              onPressed: () => ref
-                                  .read(appSettingsProvider.notifier)
-                                  .saveBoolSetting(
-                                      'hide_balance', !hideBalance),
-                              icon: Icon(
-                                hideBalance
-                                    ? Icons.visibility_off_rounded
-                                    : Icons.visibility_rounded,
-                                color: cs.onPrimary.withAlpha(179),
-                                size: 24,
+                              IconButton(
+                                onPressed: () => ref
+                                    .read(appSettingsProvider.notifier)
+                                    .saveBoolSetting(
+                                        'hide_balance', !hideBalance),
+                                icon: Icon(
+                                  hideBalance
+                                      ? Icons.visibility_off_rounded
+                                      : Icons.visibility_rounded,
+                                  color: headerFg.withAlpha(179),
+                                  size: 24,
+                                ),
+                                tooltip: hideBalance
+                                    ? 'Mostrar saldo'
+                                    : 'Ocultar saldo',
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(
+                                    minWidth: 30, minHeight: 30),
                               ),
-                              tooltip: hideBalance
-                                  ? 'Mostrar saldo'
-                                  : 'Ocultar saldo',
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                  minWidth: 30, minHeight: 30),
-                            ),
-                          ],
-                        ),
-                        const Gap(4),
-                        Text(
-                          'Saldo disponível',
-                          style: TextStyle(
-                            color: cs.onPrimary.withAlpha(140),
-                            fontSize: 11,
-                            letterSpacing: 0.6,
-                            fontWeight: FontWeight.w500,
+                            ],
                           ),
-                        ),
-                        const Gap(3),
-                        if (isLoading)
-                          AppShimmer(
-                              width: 160, height: 40, color: cs.onPrimary)
-                        else
-                          Text(
-                            hideBalance
-                                ? 'R\$ \u2022\u2022\u2022\u2022\u2022\u2022'
-                                : CurrencyFormatter.format(availableCents),
-                            style: TextStyle(
-                              color: cs.onPrimary,
-                              fontSize: 34,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: -1.5,
-                              height: 1.1,
-                            ),
-                          ),
-                        const Gap(14),
-                        Row(
-                          children: [
-                            Flexible(
-                              fit: FlexFit.tight,
-                              child: BalancePill(
+                          const Gap(4),
+                        ],
+                        // Desktop: saudação + botão na mesma linha que o saldo
+                        if (useNavRail)
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      'Saldo disponível',
+                                      style: TextStyle(
+                                        color: headerFg.withAlpha(140),
+                                        fontSize: 11,
+                                        letterSpacing: 0.6,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    const Gap(2),
+                                    if (isLoading)
+                                      AppShimmer(
+                                          width: 140,
+                                          height: 28,
+                                          color: headerFg)
+                                    else
+                                      Text(
+                                        hideBalance
+                                            ? 'R\$ \u2022\u2022\u2022\u2022\u2022\u2022'
+                                            : CurrencyFormatter.format(
+                                                availableCents),
+                                        style: TextStyle(
+                                          color: headerFg,
+                                          fontSize: 26,
+                                          fontWeight: FontWeight.w700,
+                                          letterSpacing: -1,
+                                          height: 1.1,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                onPressed: () => ref
+                                    .read(appSettingsProvider.notifier)
+                                    .saveBoolSetting(
+                                        'hide_balance', !hideBalance),
+                                icon: Icon(
+                                  hideBalance
+                                      ? Icons.visibility_off_rounded
+                                      : Icons.visibility_rounded,
+                                  color: headerFg.withAlpha(179),
+                                  size: 20,
+                                ),
+                                tooltip: hideBalance
+                                    ? 'Mostrar saldo'
+                                    : 'Ocultar saldo',
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              const Gap(8),
+                              BalancePill(
                                 label: 'Receitas',
                                 cents: isLoading ? null : incomeCents,
                                 icon: Icons.arrow_upward_rounded,
                                 color: const Color(0xFF2ECC71),
-                                onPrimary: cs.onPrimary,
+                                onPrimary: headerFg,
                                 isLoading: isLoading,
                               ),
-                            ),
-                            const Gap(8),
-                            Flexible(
-                              fit: FlexFit.tight,
-                              child: BalancePill(
+                              const Gap(6),
+                              BalancePill(
                                 label: 'Despesas',
                                 cents: isLoading ? null : expensesCents,
                                 icon: Icons.arrow_downward_rounded,
                                 color: Colors.redAccent,
-                                onPrimary: cs.onPrimary,
+                                onPrimary: headerFg,
                                 isLoading: isLoading,
                               ),
-                            ),
-                            const Gap(8),
-                            Flexible(
-                              fit: FlexFit.tight,
-                              child: BalancePill(
+                              const Gap(6),
+                              BalancePill(
                                 label: 'Projetado',
                                 cents: isLoading ? null : projectedCents,
                                 icon: Icons.arrow_outward_rounded,
                                 color: Colors.yellowAccent,
-                                onPrimary: cs.onPrimary,
+                                onPrimary: headerFg,
                                 isLoading: isLoading,
                               ),
+                            ],
+                          )
+                        else ...[
+                          Text(
+                            'Saldo disponível',
+                            style: TextStyle(
+                              color: headerFg.withAlpha(140),
+                              fontSize: 11,
+                              letterSpacing: 0.6,
+                              fontWeight: FontWeight.w500,
                             ),
-                          ],
-                        ),
+                          ),
+                          const Gap(3),
+                          if (isLoading)
+                            AppShimmer(width: 160, height: 40, color: headerFg)
+                          else
+                            Text(
+                              hideBalance
+                                  ? 'R\$ \u2022\u2022\u2022\u2022\u2022\u2022'
+                                  : CurrencyFormatter.format(availableCents),
+                              style: TextStyle(
+                                color: headerFg,
+                                fontSize: 34,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -1.5,
+                                height: 1.1,
+                              ),
+                            ),
+                          const Gap(14),
+                          Row(
+                            children: [
+                              Flexible(
+                                fit: FlexFit.tight,
+                                child: BalancePill(
+                                  label: 'Receitas',
+                                  cents: isLoading ? null : incomeCents,
+                                  icon: Icons.arrow_upward_rounded,
+                                  color: const Color(0xFF2ECC71),
+                                  onPrimary: headerFg,
+                                  isLoading: isLoading,
+                                ),
+                              ),
+                              const Gap(8),
+                              Flexible(
+                                fit: FlexFit.tight,
+                                child: BalancePill(
+                                  label: 'Despesas',
+                                  cents: isLoading ? null : expensesCents,
+                                  icon: Icons.arrow_downward_rounded,
+                                  color: Colors.redAccent,
+                                  onPrimary: headerFg,
+                                  isLoading: isLoading,
+                                ),
+                              ),
+                              const Gap(8),
+                              Flexible(
+                                fit: FlexFit.tight,
+                                child: BalancePill(
+                                  label: 'Projetado',
+                                  cents: isLoading ? null : projectedCents,
+                                  icon: Icons.arrow_outward_rounded,
+                                  color: Colors.yellowAccent,
+                                  onPrimary: headerFg,
+                                  isLoading: isLoading,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -595,7 +719,159 @@ class _HomeHeader extends ConsumerWidget {
   }
 }
 
-// ─── _BottomNavBar ────────────────────────────────────────────────────────────
+// ─── _DesktopSidebar (desktop/tablet) ─────────────────────────────────────
+
+class _DesktopSidebar extends StatelessWidget {
+  final int currentIndex;
+  final ValueChanged<int> onTap;
+
+  const _DesktopSidebar({required this.currentIndex, required this.onTap});
+
+  static const _items = [
+    _SidebarItem(Icons.home_outlined, Icons.home_rounded, 'Início'),
+    _SidebarItem(
+        Icons.credit_card_outlined, Icons.credit_card_rounded, 'Cartões'),
+    _SidebarItem(Icons.bar_chart_outlined, Icons.bar_chart_rounded, 'Análise'),
+    _SidebarItem(
+        Icons.settings_outlined, Icons.settings_rounded, 'Configurações'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      width: 220,
+      decoration: BoxDecoration(
+        color: isDark ? cs.surface : cs.surfaceContainerHighest.withAlpha(90),
+        border: Border(
+          right: BorderSide(color: cs.onSurface.withAlpha(20)),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Logo ────────────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [cs.primary, cs.primary.withAlpha(200)],
+                    ),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Center(
+                    child: Text(
+                      'N',
+                      style: TextStyle(
+                        color: cs.onPrimary,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ),
+                const Gap(12),
+                Text(
+                  'Nexa',
+                  style: TextStyle(
+                    color: cs.onSurface,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // ── Items de navegação ──────────────────────────────────────
+          ...List.generate(_items.length, (i) {
+            final item = _items[i];
+            final isActive = currentIndex == i;
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+              child: Material(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(AppTheme.radiusChip),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusChip),
+                  onTap: () => onTap(i),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 11),
+                    decoration: BoxDecoration(
+                      color: isActive
+                          ? cs.primary.withAlpha(isDark ? 40 : 20)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(AppTheme.radiusChip),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          isActive ? item.activeIcon : item.icon,
+                          size: 20,
+                          color: isActive
+                              ? cs.primary
+                              : cs.onSurface.withAlpha(140),
+                        ),
+                        const Gap(12),
+                        Text(
+                          item.label,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight:
+                                isActive ? FontWeight.w700 : FontWeight.w500,
+                            color: isActive
+                                ? cs.primary
+                                : cs.onSurface.withAlpha(178),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }),
+
+          const Spacer(),
+
+          // ── Versão ──────────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            child: Text(
+              'v1.3.0',
+              style: TextStyle(
+                fontSize: 11,
+                color: cs.onSurface.withAlpha(77),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SidebarItem {
+  final IconData icon;
+  final IconData activeIcon;
+  final String label;
+  const _SidebarItem(this.icon, this.activeIcon, this.label);
+}
+
+// ─── _BottomNavBar (mobile) ──────────────────────────────────────────────────
 
 class _BottomNavBar extends StatelessWidget {
   final int currentIndex;

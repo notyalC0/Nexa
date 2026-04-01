@@ -170,10 +170,13 @@ class TransactionFilterBar extends StatelessWidget {
 class _FutureMonthBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final badgeColor =
+        isDark ? const Color(0xFFFFB020) : const Color(0xFF92400E);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
-        color: Colors.amber.withAlpha(38),
+        color: Colors.amber.withAlpha(isDark ? 51 : 38),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.amber.withAlpha(102)),
       ),
@@ -183,7 +186,7 @@ class _FutureMonthBadge extends StatelessWidget {
           context,
           fontSize: 11,
           fontWeight: FontWeight.w700,
-          color: Colors.amber.shade700,
+          color: badgeColor,
         ),
       ),
     );

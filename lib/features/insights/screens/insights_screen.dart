@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import 'package:nexa/core/theme/app_theme.dart';
 import 'package:nexa/core/utils/currency_formatter.dart';
+import 'package:nexa/core/utils/responsive.dart';
 import 'package:nexa/core/widgets/app_shimmer.dart';
 import 'package:nexa/features/insights/providers/analytics_provider.dart';
 import 'package:nexa/features/transactions/providers/transactions_provider.dart';
@@ -128,54 +129,77 @@ class InsightsScreen extends ConsumerWidget {
     final cs = Theme.of(context).colorScheme;
     final month = ref.watch(selectedMonthProvider);
     final analyticsAsync = ref.watch(analyticsProvider);
+    final useNavRail = Responsive.useNavRail(context);
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
         backgroundColor: cs.surface,
+        appBar: useNavRail
+            ? AppBar(
+                backgroundColor: cs.surface,
+                elevation: 0,
+                scrolledUnderElevation: 1,
+                surfaceTintColor: Colors.transparent,
+                centerTitle: false,
+                title: Text(
+                  'Análise',
+                  style: TextStyle(
+                    color: cs.onSurface,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                actions: [
+                  _MonthSelector(month: month, ref: ref, desktop: true),
+                  const Gap(16),
+                ],
+              )
+            : null,
         body: CustomScrollView(
           physics: const BouncingScrollPhysics(
             parent: AlwaysScrollableScrollPhysics(),
           ),
           slivers: [
-            // ── Header ────────────────────────────────────────────────
-            SliverAppBar(
-              pinned: true,
-              expandedHeight: 120,
-              elevation: 0,
-              scrolledUnderElevation: 4,
-              surfaceTintColor: Colors.transparent,
-              shadowColor: Colors.black.withAlpha(60),
-              backgroundColor: cs.primary,
-              systemOverlayStyle: SystemUiOverlayStyle.light,
-              title: Text(
-                'Análise',
-                style: TextStyle(
-                  color: cs.onPrimary,
-                  fontSize: 21,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.5,
-                ),
-              ),
-              flexibleSpace: FlexibleSpaceBar(
-                collapseMode: CollapseMode.parallax,
-                background: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        cs.primary,
-                        Color.lerp(cs.primary, Colors.black, 0.14)!,
-                      ],
-                    ),
+            // ── Header (apenas mobile) ─────────────────────────────
+            if (!useNavRail)
+              SliverAppBar(
+                pinned: true,
+                expandedHeight: 120,
+                elevation: 0,
+                scrolledUnderElevation: 4,
+                surfaceTintColor: Colors.transparent,
+                shadowColor: Colors.black.withAlpha(60),
+                backgroundColor: cs.primary,
+                systemOverlayStyle: SystemUiOverlayStyle.light,
+                title: Text(
+                  'Análise',
+                  style: TextStyle(
+                    color: cs.onPrimary,
+                    fontSize: 21,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
                   ),
-                  alignment: Alignment.bottomCenter,
-                  padding: const EdgeInsets.only(bottom: 14),
-                  child: _MonthSelector(month: month, ref: ref),
+                ),
+                flexibleSpace: FlexibleSpaceBar(
+                  collapseMode: CollapseMode.parallax,
+                  background: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          cs.primary,
+                          Color.lerp(cs.primary, Colors.black, 0.14)!,
+                        ],
+                      ),
+                    ),
+                    alignment: Alignment.bottomCenter,
+                    padding: const EdgeInsets.only(bottom: 14),
+                    child: _MonthSelector(month: month, ref: ref),
+                  ),
                 ),
               ),
-            ),
 
             // ── Conteúdo ──────────────────────────────────────────────
             analyticsAsync.when(
@@ -215,26 +239,34 @@ class InsightsScreen extends ConsumerWidget {
 class _MonthSelector extends StatelessWidget {
   final String month;
   final WidgetRef ref;
+  final bool desktop;
 
-  const _MonthSelector({required this.month, required this.ref});
+  const _MonthSelector({
+    required this.month,
+    required this.ref,
+    this.desktop = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isNow = _isCurrentMonth(month);
+    final fg = desktop ? cs.onSurface : cs.onPrimary;
 
     return Row(
+      mainAxisSize: desktop ? MainAxisSize.min : MainAxisSize.max,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         _NavArrow(
           icon: Icons.chevron_left_rounded,
           onTap: () => _prevMonth(ref),
+          desktop: desktop,
         ),
         const Gap(12),
         Text(
           _fullMonth(month),
           style: TextStyle(
-            color: cs.onPrimary,
+            color: fg,
             fontSize: 15,
             fontWeight: FontWeight.w600,
             letterSpacing: -0.2,
@@ -245,6 +277,7 @@ class _MonthSelector extends StatelessWidget {
           icon: Icons.chevron_right_rounded,
           onTap: isNow ? null : () => _nextMonth(ref),
           disabled: isNow,
+          desktop: desktop,
         ),
       ],
     );
@@ -255,28 +288,37 @@ class _NavArrow extends StatelessWidget {
   final IconData icon;
   final VoidCallback? onTap;
   final bool disabled;
+  final bool desktop;
 
   const _NavArrow({
     required this.icon,
     this.onTap,
     this.disabled = false,
+    this.desktop = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final bg = desktop
+        ? cs.surfaceContainerHighest.withAlpha(disabled ? 60 : 180)
+        : cs.onPrimary.withAlpha(disabled ? 15 : 30);
+    final fg = desktop
+        ? cs.onSurface.withAlpha(disabled ? 77 : 200)
+        : cs.onPrimary.withAlpha(disabled ? 77 : 200);
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
         width: 32,
         height: 32,
         decoration: BoxDecoration(
-          color: cs.onPrimary.withAlpha(disabled ? 15 : 30),
+          color: bg,
           shape: BoxShape.circle,
         ),
         child: Icon(
           icon,
-          color: cs.onPrimary.withAlpha(disabled ? 77 : 200),
+          color: fg,
           size: 20,
         ),
       ),
@@ -334,6 +376,20 @@ class _InsightsContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = Responsive.isDesktop(context);
+
+    // Seções complementares (categorias, cartões, orçamento, reserva)
+    final List<Widget> secondarySections = [
+      if (data.topCategories.isNotEmpty)
+        _buildSection('Maiores gastos do mês', _CategoriesCard(data: data)),
+      if (data.hasCardExpenses)
+        _buildSection('Gastos com cartões', _CardExpensesCard(data: data)),
+      if (data.hasSalary)
+        _buildSection('Orçamento mensal', _BudgetCard(data: data)),
+      if (data.hasEmergencyGoal)
+        _buildSection('Reserva de emergência', _EmergencyCard(data: data)),
+    ];
+
     return SliverToBoxAdapter(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(
@@ -342,53 +398,55 @@ class _InsightsContent extends StatelessWidget {
           AppTheme.paddingScreen,
           0,
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── 1. Resumo do mês ────────────────────────────────────
-            _SummaryRow(data: data),
-            const Gap(22),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final halfWidth =
+                (constraints.maxWidth - Responsive.gridSpacing) / 2;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── 1. Resumo do mês ────────────────────────────────────
+                _SummaryRow(data: data),
+                const Gap(22),
 
-            // ── 2. Evolução mensal (BarChart) ───────────────────────
-            _SectionLabel('Evolução mensal'),
-            const Gap(10),
-            _TrendCard(data: data),
-            const Gap(22),
+                // ── 2. Evolução mensal (BarChart) ───────────────────────
+                _SectionLabel('Evolução mensal'),
+                const Gap(10),
+                _TrendCard(data: data),
+                const Gap(22),
 
-            // ── 3. Gastos por categoria ─────────────────────────────
-            if (data.topCategories.isNotEmpty) ...[
-              _SectionLabel('Maiores gastos do mês'),
-              const Gap(10),
-              _CategoriesCard(data: data),
-              const Gap(22),
-            ],
+                // ── 3+ Seções secundárias — 2 colunas no desktop ────────
+                if (isDesktop && secondarySections.length >= 2)
+                  Wrap(
+                    spacing: Responsive.gridSpacing,
+                    runSpacing: 22,
+                    children: secondarySections
+                        .map((section) => SizedBox(
+                              width: halfWidth,
+                              child: section,
+                            ))
+                        .toList(),
+                  )
+                else
+                  ...secondarySections.expand((s) => [s, const Gap(22)]),
 
-            // ── 4. Gastos por cartão de crédito ─────────────────────
-            if (data.hasCardExpenses) ...[
-              _SectionLabel('Gastos com cartões'),
-              const Gap(10),
-              _CardExpensesCard(data: data),
-              const Gap(22),
-            ],
-
-            // ── 5. Orçamento (salário configurado) ──────────────────
-            if (data.hasSalary) ...[
-              _SectionLabel('Orçamento mensal'),
-              const Gap(10),
-              _BudgetCard(data: data),
-              const Gap(22),
-            ],
-
-            // ── 6. Reserva de emergência ────────────────────────────
-            if (data.hasEmergencyGoal) ...[
-              _SectionLabel('Reserva de emergência'),
-              const Gap(10),
-              _EmergencyCard(data: data),
-              const Gap(22),
-            ],
-          ],
+                const Gap(22),
+              ],
+            );
+          },
         ),
       ),
+    );
+  }
+
+  Widget _buildSection(String label, Widget card) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SectionLabel(label),
+        const Gap(10),
+        card,
+      ],
     );
   }
 }
@@ -401,8 +459,9 @@ class _SummaryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final balanceColor =
-        data.balanceCents >= 0 ? const Color(0xFF2ECC71) : Colors.redAccent;
+    final incomeColor = AppTheme.incomeColor(context);
+    final expenseColor = AppTheme.expenseColor(context);
+    final balanceColor = data.balanceCents >= 0 ? incomeColor : expenseColor;
 
     return Row(
       children: [
@@ -410,7 +469,7 @@ class _SummaryRow extends StatelessWidget {
           child: _SummaryTile(
             label: 'Receitas',
             cents: data.currentIncomeCents,
-            color: const Color(0xFF2ECC71),
+            color: incomeColor,
             icon: Icons.arrow_upward_rounded,
           ),
         ),
@@ -419,7 +478,7 @@ class _SummaryRow extends StatelessWidget {
           child: _SummaryTile(
             label: 'Despesas',
             cents: data.currentExpensesCents,
-            color: Colors.redAccent,
+            color: expenseColor,
             icon: Icons.arrow_downward_rounded,
           ),
         ),
@@ -459,44 +518,67 @@ class _SummaryTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final compact = Responsive.useNavRail(context);
+    final valueText =
+        '${prefixMinus ? '-' : ''}${CurrencyFormatter.format(cents)}';
+
+    final labelWidget = Text(
+      label,
+      style: TextStyle(
+        fontSize: 10,
+        fontWeight: FontWeight.w600,
+        color: cs.onSurface.withAlpha(140),
+        letterSpacing: 0.4,
+      ),
+    );
+
+    final valueWidget = FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: Text(
+        valueText,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+          color: color,
+          letterSpacing: -0.3,
+        ),
+      ),
+    );
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 10 : 12,
+        vertical: compact ? 8 : 14,
+      ),
       decoration: BoxDecoration(
         color: isDark ? color.withAlpha(25) : color.withAlpha(18),
         borderRadius: BorderRadius.circular(AppTheme.radiusCard),
         border: Border.all(color: color.withAlpha(50)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: color, size: 18),
-          const Gap(8),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: cs.onSurface.withAlpha(140),
-              letterSpacing: 0.4,
+      child: compact
+          ? Row(
+              children: [
+                Icon(icon, color: color, size: 16),
+                const Gap(10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [labelWidget, const Gap(1), valueWidget],
+                  ),
+                ),
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(icon, color: color, size: 18),
+                const Gap(8),
+                labelWidget,
+                const Gap(3),
+                valueWidget,
+              ],
             ),
-          ),
-          const Gap(3),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              '${prefixMinus ? '-' : ''}${CurrencyFormatter.format(cents)}',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: color,
-                letterSpacing: -0.3,
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -507,12 +589,11 @@ class _TrendCard extends StatelessWidget {
   final AnalyticsData data;
   const _TrendCard({required this.data});
 
-  static const _incomeColor = Color(0xFF2ECC71);
-  static const _expenseColor = Colors.redAccent;
-
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final incomeClr = AppTheme.incomeColor(context);
+    final expenseClr = AppTheme.expenseColor(context);
     final trend = data.trend;
 
     if (trend.isEmpty) {
@@ -535,9 +616,9 @@ class _TrendCard extends StatelessWidget {
           // Legenda
           Row(
             children: [
-              _LegendDot(color: _incomeColor, label: 'Receita'),
+              _LegendDot(color: incomeClr, label: 'Receita'),
               const Gap(16),
-              _LegendDot(color: _expenseColor, label: 'Despesa'),
+              _LegendDot(color: expenseClr, label: 'Despesa'),
             ],
           ),
           const Gap(18),
@@ -556,7 +637,7 @@ class _TrendCard extends StatelessWidget {
                     barRods: [
                       BarChartRodData(
                         toY: t.incomeCents / 100.0,
-                        color: _incomeColor,
+                        color: incomeClr,
                         width: 11,
                         borderRadius: const BorderRadius.vertical(
                           top: Radius.circular(5),
@@ -564,7 +645,7 @@ class _TrendCard extends StatelessWidget {
                       ),
                       BarChartRodData(
                         toY: t.expensesCents / 100.0,
-                        color: _expenseColor,
+                        color: expenseClr,
                         width: 11,
                         borderRadius: const BorderRadius.vertical(
                           top: Radius.circular(5),
@@ -627,7 +708,7 @@ class _TrendCard extends StatelessWidget {
                         TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: isIncome ? _incomeColor : _expenseColor,
+                          color: isIncome ? incomeClr : expenseClr,
                         ),
                       );
                     },

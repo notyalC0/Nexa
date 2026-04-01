@@ -25,6 +25,7 @@ dependencies:
   # Banco de dados
   sqflite: ^2.4.2
   sqflite_common_ffi: ^2.3.4
+  sqlite3_flutter_libs: ^0.5.28
   path: ^1.9.1
 
   # Formatação / Masks
