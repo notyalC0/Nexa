@@ -2,7 +2,9 @@
 
 Aplicativo de controle financeiro pessoal desenvolvido com Flutter, focado em simplicidade, design moderno e performance.
 
-> **Versão atual:** 1.3.0
+> **Versão atual:** 1.4.0
+>
+> Histórico completo: [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
@@ -16,7 +18,7 @@ Aplicativo de controle financeiro pessoal desenvolvido com Flutter, focado em si
 - [Temas e design](#temas-e-design)
 - [Como rodar](#como-rodar)
 - [Plataformas suportadas](#plataformas-suportadas)
-- [Changelog](#changelog)
+- [Historico de Versoes](#historico-de-versoes)
 
 ---
 
@@ -25,15 +27,18 @@ Aplicativo de controle financeiro pessoal desenvolvido com Flutter, focado em si
 ### Transações
 
 - Cadastro de despesas, receitas e investimentos
+- Separação entre **data da compra** (`purchase_date`) e **data efetiva no saldo** (`effective_date`)
 - Suporte a transações **recorrentes** (geração automática mensal)
 - **Desativação de recorrência** remove automaticamente todas as ocorrências futuras
 - Suporte a **parcelamento** (divide o valor igualmente entre as parcelas, com distribuição justa de centavos)
 - Status de transação: **Confirmado** ou **Pendente**
 - Vinculação a **cartão de crédito** ou débito/dinheiro
 - Vinculação a **categoria**
+- Vinculação opcional a **meta financeira** (`goal_id`) para registrar aportes
 - Campo de nota livre por transação
 - **Badges visuais** no card: ícone + cor da categoria, nome + cor do cartão vinculado
 - Seletor de data **sem entrada manual** (apenas date picker)
+- Para cartão de crédito, a data efetiva é calculada automaticamente com base em **fechamento + vencimento**
 
 ### Lista de transações
 
@@ -55,8 +60,18 @@ Aplicativo de controle financeiro pessoal desenvolvido com Flutter, focado em si
 - **Gastos por categoria**: top 6 do mês com ícone, cor, barra de progresso e percentual
 - **Gastos por cartão de crédito**: split visual cartão vs débito/dinheiro + breakdown por cartão
 - **Orçamento mensal**: barra de progresso gasto vs salário configurado, com badge de status
-- **Reserva de emergência**: progresso visual meta vs valor guardado
+- **Metas financeiras**: lista de metas ativas com progresso, valor restante e estimativa por média mensal de aportes
 - **Atualização reativa**: dados recalculam automaticamente ao salvar/editar transações
+
+### Metas
+
+- Nova aba **Metas** na navegação principal
+- Meta padrão de **Reserva de emergência** criada no banco como `is_default = true`
+- Usuário pode criar metas com **nome, valor alvo, prazo opcional, ícone e cor**
+- Cada aporte é uma **transação normal** que debita do saldo e preenche `goal_id`
+- Metas possuem progresso calculado por: `initial_amount_cents + soma dos aportes confirmados`
+- Estimativa de alcance baseada na **média mensal de aportes**
+- A meta padrão de reserva **não pode ser deletada**
 
 ### Splash screen
 
@@ -90,7 +105,8 @@ Aplicativo de controle financeiro pessoal desenvolvido com Flutter, focado em si
 - Toggle de visibilidade do saldo
 - Tema claro/escuro
 - Saldo inicial configurável
-- Configuração de salário mensal, meta e reserva de emergência
+- Configuração de salário mensal
+- Seção financeira orienta o uso da nova aba **Metas**
 - Gerenciamento de categorias personalizadas
 
 ### Notificações
@@ -126,6 +142,7 @@ Utiliza **Riverpod 3** com `NotifierProvider` e `FutureProvider`:
 | `transactionsByMonthProvider`    | `FutureProvider`   | Lista filtrada por mês/tipo                                        |
 | `transactionsProvider`           | `FutureProvider`   | Todas as transações do mês selecionado                             |
 | `analyticsProvider`              | `FutureProvider`   | Dados completos de análise (trend, categorias, cartões, orçamento) |
+| `goalsProvider`                  | `FutureProvider`   | Lista de metas com progresso, restante e estimativa                |
 | `selectedMonthProvider`          | `StateProvider`    | Mês selecionado na tela de análise                                 |
 | `creditCardProvider`             | `FutureProvider`   | Lista de cartões                                                   |
 | `cardLimitDetailsProvider`       | `FutureProvider`   | Limites usados por cartão                                          |
@@ -140,7 +157,7 @@ Utiliza **Riverpod 3** com `NotifierProvider` e `FutureProvider`:
 - `_syncList` com diff de IDs + detecção de data-changes para o `SliverAnimatedList`
 - `ref.read` em callbacks (sem watch em event handlers)
 - `analyticsProvider` assiste `transactionsProvider` — atualiza automaticamente ao alterar transações
-- Invalidação centralizada via `_invalidateAll()` (transações, saldo, score, analytics)
+- Invalidação centralizada via `_invalidateAll()` (transações, saldo, score, analytics, metas)
 
 ---
 
@@ -151,13 +168,16 @@ lib/
 ├── main.dart
 ├── core/
 │   ├── database/
-│   │   ├── database_helper.dart       # Singleton SQLite, migrações, CRUD
+│   │   ├── database_helper.dart      # Singleton SQLite, migrações, CRUD
 │   │   └── default_categories.dart   # Categorias padrão do app
 │   ├── models/
 │   │   ├── transactions.dart
 │   │   ├── credit_cards.dart
-│   │   └── categories.dart│   ├── notifications/
-│   │   └── notification_service.dart # Singleton: agenda/cancela lembretes locais│   ├── theme/
+│   │   ├── categories.dart
+│   │   └── goals.dart
+│   ├── notifications/
+│   │   └── notification_service.dart # Singleton: agenda/cancela lembretes locais
+│   ├── theme/
 │   │   └── app_theme.dart            # Tokens visuais, helpers de estilo
 │   ├── utils/
 │   │   ├── currency_formatter.dart   # Formatação de centavos → R$ X.XXX,XX
@@ -188,7 +208,11 @@ lib/
     │       └── transactions_selection_provider.dart
     ├── insights/
     │   ├── screens/insights_screen.dart      # Tela completa de análise financeira
-    │   └── providers/analytics_provider.dart # Trend, categorias, cartões, orçamento
+    │   └── providers/analytics_provider.dart # Trend, categorias, cartões, orçamento e metas
+    ├── goals/
+    │   ├── models/goal_progress.dart
+    │   ├── providers/goals_provider.dart
+    │   └── screens/goals_screen.dart
     ├── splash/
     │   └── screens/splash_screen.dart        # Splash animada com logo
     ├── cards/
@@ -225,7 +249,7 @@ lib/
 
 ## Banco de dados
 
-SQLite gerenciado por `DatabaseHelper` (singleton). Schema versão 3.
+SQLite gerenciado por `DatabaseHelper` (singleton). Schema versão 4.
 
 ### Tabelas
 
@@ -237,9 +261,12 @@ SQLite gerenciado por `DatabaseHelper` (singleton). Schema versão 3.
 | `type` | TEXT | `expense`, `income`, `investment` |
 | `status` | TEXT | `confirmed`, `pending` |
 | `description` | TEXT | Descrição livre |
-| `date` | TEXT | `yyyy-MM-dd` |
+| `purchase_date` | TEXT | Data da compra / lançamento (`yyyy-MM-dd`) |
+| `effective_date` | TEXT | Data em que impacta o saldo (`yyyy-MM-dd`) |
 | `category_id` | INTEGER FK | Categoria |
 | `credit_cards_id` | INTEGER FK | Cartão (nullable) |
+| `is_invoice_paid` | INTEGER | `0/1`, nullable para não-cartão e legado |
+| `goal_id` | INTEGER FK | Meta vinculada (nullable) |
 | `is_recurring` | INTEGER | 0/1 |
 | `recurring_id` | TEXT | UUID do grupo recorrente |
 | `parent_id` | INTEGER | ID da transação pai |
@@ -253,12 +280,19 @@ SQLite gerenciado por `DatabaseHelper` (singleton). Schema versão 3.
 
 **`categories`** — `id`, `name`, `icon`, `color_hex`, `type`, `is_default`
 
+**`goals`** — `id`, `name`, `target_amount_cents`, `initial_amount_cents`, `target_date`, `icon`, `color_hex`, `is_default`, `is_deletable`, `is_archived`, `created_at`, `updated_at`
+
 **`settings`** — `key`, `value` (chave-valor genérico)
 
 ### Migrações
 
 - **v1 → v2**: remove categorias duplicadas, cria índices
 - **v2 → v3**: adiciona `recurring_id`, `parent_id`, migra transações recorrentes existentes
+- **v3 → v4**:
+  - substitui `date` por `purchase_date` + `effective_date`
+  - adiciona `is_invoice_paid` e `goal_id` em `transactions`
+  - cria a tabela `goals`
+  - migra a reserva de emergência antiga de `settings` para uma meta padrão
 
 ---
 
@@ -334,23 +368,6 @@ As permissões `POST_NOTIFICATIONS`, `VIBRATE` e `RECEIVE_BOOT_COMPLETED` são d
 
 ---
 
-## Changelog
+## Historico de Versoes
 
-### 1.3.0
-
-- **Análise financeira**: nova tela com resumo, gráfico de evolução (6 meses), gastos por categoria, gastos por cartão, orçamento vs salário e reserva de emergência
-- **Splash screen**: animação de entrada com logo e transição suave
-- **Perfil do usuário**: nome editável e avatar via galeria no card de perfil das configurações
-- **Badges visuais**: cards de transação exibem ícone/cor da categoria e nome/cor do cartão vinculado
-- **Saudação personalizada**: header da home usa o nome do usuário + widget de avatar
-- **Desativação de recorrência**: ao desativar, ocorrências futuras são removidas automaticamente
-- **Reatividade do analytics**: dados recalculam instantaneamente ao salvar/editar transações
-- **Correção**: seletor de data bloqueia entrada manual (apenas date picker)
-- **Correção**: labels de status não transbordam em campos compactos
-- **Correção**: lista de transações reflete edições imediatamente (detecção de data-changes)
-- **Correção**: health score não quebra quando meta de emergência é zero
-
-### 1.2.0
-
-- Ícones e splash screen nativos personalizados
-- Versão inicial de notificações locais com lembrete diário configurável
+O histórico detalhado de mudanças foi movido para [CHANGELOG.md](CHANGELOG.md).
