@@ -10,6 +10,8 @@ import 'package:nexa/core/utils/currency_formatter.dart';
 import 'package:nexa/core/widgets/app_shimmer.dart';
 import 'package:nexa/features/cards/providers/cards_provider.dart';
 import 'package:nexa/features/cards/screens/card_screen.dart';
+import 'package:nexa/features/goals/providers/goals_provider.dart';
+import 'package:nexa/features/goals/screens/goals_screen.dart';
 import 'package:nexa/features/home/provider/balance_provider.dart';
 import 'package:nexa/features/home/provider/health_score_provider.dart';
 import 'package:nexa/features/home/widgets/balance_pill.dart';
@@ -56,6 +58,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             _HomePage(),
             CardsScreen(),
             InsightsScreen(),
+            GoalsScreen(),
             SettingsScreen(),
           ],
         ),
@@ -233,6 +236,8 @@ class _HomeHeader extends ConsumerWidget {
     ref.invalidate(balanceProvider);
     ref.invalidate(cardLimitDetailsProvider);
     ref.invalidate(analyticsProvider);
+    ref.invalidate(goalsProvider);
+    ref.invalidate(defaultGoalProgressProvider);
   }
 
   Future<void> _deleteSelected(
@@ -648,11 +653,18 @@ class _BottomNavBar extends StatelessWidget {
                 onTap: () => onTap(2),
               ),
               _NavItem(
+                icon: Icons.flag_outlined,
+                activeIcon: Icons.flag_rounded,
+                label: 'Metas',
+                isActive: currentIndex == 3,
+                onTap: () => onTap(3),
+              ),
+              _NavItem(
                 icon: Icons.settings_outlined,
                 activeIcon: Icons.settings_rounded,
                 label: 'Config.',
-                isActive: currentIndex == 3,
-                onTap: () => onTap(3),
+                isActive: currentIndex == 4,
+                onTap: () => onTap(4),
               ),
             ],
           ),

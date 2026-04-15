@@ -41,8 +41,8 @@ class NotificationService {
     // Carrega base de dados de fusos horários e define o fuso local
     tz.initializeTimeZones();
     try {
-      final String timezoneName = await FlutterTimezone.getLocalTimezone();
-      tz.setLocalLocation(tz.getLocation(timezoneName));
+      final TimezoneInfo timezoneName = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(timezoneName as String));
     } catch (_) {
       // Fallback: mantém UTC se não conseguir o fuso
     }

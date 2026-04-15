@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:nexa/core/database/default_categories.dart';
 import 'package:nexa/core/models/categories.dart';
 import 'package:nexa/core/models/credit_cards.dart';
+import 'package:nexa/core/models/goals.dart';
 import 'package:nexa/core/models/transactions.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
@@ -22,7 +23,10 @@ class DatabaseHelper {
     final path = join(await getDatabasesPath(), 'nexa.db');
     return openDatabase(
       path,
-      version: 3,
+      version: 4,
+      onConfigure: (db) async {
+        await db.execute('PRAGMA foreign_keys = ON');
+      },
       onCreate: _createTables,
       onUpgrade: _onUpgrade,
     );
@@ -31,7 +35,7 @@ class DatabaseHelper {
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await _removeDuplicateCategoriesFromDb(db);
-      await _createIndexes(db);
+      await _createLegacyIndexes(db);
     }
     if (oldVersion < 3) {
       await db.execute('ALTER TABLE transactions ADD COLUMN recurring_id TEXT');
@@ -55,6 +59,9 @@ class DatabaseHelper {
           whereArgs: [id],
         );
       }
+    }
+    if (oldVersion < 4) {
+      await _migrateV3ToV4(db);
     }
   }
 
@@ -81,40 +88,60 @@ class DatabaseHelper {
       )
     ''');
     await db.execute('''
-      CREATE TABLE transactions(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        amount_cents INTEGER NOT NULL,
-        type TEXT NOT NULL,
-        status TEXT NOT NULL,
-        description TEXT,
-        date TEXT NOT NULL,
-        category_id INTEGER NOT NULL,
-        credit_cards_id INTEGER,
-        installment_total INTEGER,
-        installment_current INTEGER,
-        installment_group_id TEXT,
-        is_recurring INTEGER,
-        recurring_id TEXT,
-        parent_id INTEGER,
-        note TEXT,
-        created_from_notification INTEGER,
-        created_at TEXT,
-        FOREIGN KEY (category_id) REFERENCES categories(id),
-        FOREIGN KEY (credit_cards_id) REFERENCES credit_cards(id)
-      )
-    ''');
-    await db.execute('''
       CREATE TABLE settings(
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL,
         update_at TEXT
       )
     ''');
+    await _createGoalsTable(db);
+    await _createTransactionsTableV4(db);
+    await _ensureDefaultGoal(db);
     await _removeDuplicateCategoriesFromDb(db);
     await _createIndexes(db);
   }
 
-  Future<void> _createIndexes(Database db) async {
+  Future<void> _createIndexes(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_name_type_unique
+      ON categories(name, type)
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_transactions_purchase_date
+      ON transactions(purchase_date)
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_transactions_effective_date
+      ON transactions(effective_date)
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_transactions_type_status_effective_date
+      ON transactions(type, status, effective_date)
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_transactions_card_purchase_date
+      ON transactions(credit_cards_id, purchase_date)
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_transactions_goal_id
+      ON transactions(goal_id)
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_transactions_recurring_group
+      ON transactions(recurring_id, parent_id, purchase_date)
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_goals_active
+      ON goals(is_archived, is_default)
+    ''');
+    await db.execute('''
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_goals_single_default
+      ON goals(is_default)
+      WHERE is_default = 1
+    ''');
+  }
+
+  Future<void> _createLegacyIndexes(DatabaseExecutor db) async {
     await db.execute('''
       CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_name_type_unique
       ON categories(name, type)
@@ -135,6 +162,182 @@ class DatabaseHelper {
       CREATE INDEX IF NOT EXISTS idx_transactions_recurring_group
       ON transactions(recurring_id, parent_id, date)
     ''');
+  }
+
+  Future<void> _createGoalsTable(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE goals(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        target_amount_cents INTEGER NOT NULL DEFAULT 0,
+        initial_amount_cents INTEGER NOT NULL DEFAULT 0,
+        target_date TEXT,
+        icon TEXT NOT NULL,
+        color_hex TEXT NOT NULL,
+        is_default INTEGER NOT NULL DEFAULT 0,
+        is_deletable INTEGER NOT NULL DEFAULT 1,
+        is_archived INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT
+      )
+    ''');
+  }
+
+  Future<void> _createTransactionsTableV4(DatabaseExecutor db,
+      {String tableName = 'transactions'}) async {
+    await db.execute('''
+      CREATE TABLE $tableName(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        amount_cents INTEGER NOT NULL,
+        type TEXT NOT NULL,
+        status TEXT NOT NULL,
+        description TEXT,
+        purchase_date TEXT NOT NULL,
+        effective_date TEXT NOT NULL,
+        category_id INTEGER NOT NULL,
+        credit_cards_id INTEGER,
+        is_invoice_paid INTEGER,
+        goal_id INTEGER,
+        installment_total INTEGER,
+        installment_current INTEGER,
+        installment_group_id TEXT,
+        is_recurring INTEGER,
+        recurring_id TEXT,
+        parent_id INTEGER,
+        note TEXT,
+        created_from_notification INTEGER,
+        created_at TEXT,
+        FOREIGN KEY (category_id) REFERENCES categories(id),
+        FOREIGN KEY (credit_cards_id) REFERENCES credit_cards(id),
+        FOREIGN KEY (goal_id) REFERENCES goals(id) ON DELETE SET NULL
+      )
+    ''');
+  }
+
+  Future<void> _migrateV3ToV4(Database db) async {
+    await db.transaction((txn) async {
+      await txn.execute('PRAGMA foreign_keys = OFF');
+      try {
+        await _createGoalsTable(txn);
+        await _migrateEmergencySettingsToDefaultGoal(txn);
+        await _createTransactionsTableV4(txn, tableName: 'transactions_v4');
+
+        final cards = await txn.query('credit_cards');
+        final cardMap = <int, CreditCards>{
+          for (final row in cards)
+            if (row['id'] != null) row['id'] as int: CreditCards.fromMap(row),
+        };
+
+        final transactions = await txn.query(
+          'transactions',
+          orderBy: 'id ASC',
+        );
+
+        for (final row in transactions) {
+          final legacyDate = row['date'] as String?;
+          if (legacyDate == null || legacyDate.isEmpty) continue;
+
+          final purchaseDate = legacyDate;
+          final creditCardId = row['credit_cards_id'] as int?;
+          final card = creditCardId == null ? null : cardMap[creditCardId];
+          final effectiveDate = card == null
+              ? purchaseDate
+              : _calculateEffectiveDateForCardPurchase(
+                  purchaseDate: purchaseDate,
+                  closingDay: card.closingDay,
+                  dueDay: card.dueDay,
+                );
+
+          await txn.insert('transactions_v4', {
+            'id': row['id'],
+            'amount_cents': row['amount_cents'],
+            'type': row['type'],
+            'status': row['status'],
+            'description': row['description'],
+            'purchase_date': purchaseDate,
+            'effective_date': effectiveDate,
+            'category_id': row['category_id'],
+            'credit_cards_id': creditCardId,
+            'is_invoice_paid': null,
+            'goal_id': null,
+            'installment_total': row['installment_total'],
+            'installment_current': row['installment_current'],
+            'installment_group_id': row['installment_group_id'],
+            'is_recurring': row['is_recurring'],
+            'recurring_id': row['recurring_id'],
+            'parent_id': row['parent_id'],
+            'note': row['note'],
+            'created_from_notification': row['created_from_notification'],
+            'created_at': row['created_at'],
+          });
+        }
+
+        await txn.execute('DROP TABLE transactions');
+        await txn.execute('ALTER TABLE transactions_v4 RENAME TO transactions');
+        await _createIndexes(txn);
+      } finally {
+        await txn.execute('PRAGMA foreign_keys = ON');
+      }
+    });
+  }
+
+  Future<void> _migrateEmergencySettingsToDefaultGoal(
+      DatabaseExecutor db) async {
+    final goalRaw = await db.query(
+      'settings',
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: ['emergency_goal_cents'],
+      limit: 1,
+    );
+    final currentRaw = await db.query(
+      'settings',
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: ['emergency_current_cents'],
+      limit: 1,
+    );
+
+    final targetValue =
+        goalRaw.isEmpty ? null : goalRaw.first['value'] as String?;
+    final currentValue =
+        currentRaw.isEmpty ? null : currentRaw.first['value'] as String?;
+    final targetAmount = int.tryParse(targetValue ?? '0') ?? 0;
+    final initialAmount = int.tryParse(currentValue ?? '0') ?? 0;
+
+    await _ensureDefaultGoal(
+      db,
+      targetAmountCents: targetAmount,
+      initialAmountCents: initialAmount,
+    );
+  }
+
+  Future<void> _ensureDefaultGoal(
+    DatabaseExecutor db, {
+    int targetAmountCents = 0,
+    int initialAmountCents = 0,
+  }) async {
+    final existing = await db.query(
+      'goals',
+      columns: ['id'],
+      where: 'is_default = 1',
+      limit: 1,
+    );
+    if (existing.isNotEmpty) return;
+
+    await db.insert('goals', {
+      'name': 'Reserva de emergência',
+      'target_amount_cents': targetAmountCents,
+      'initial_amount_cents': initialAmountCents,
+      'target_date': null,
+      'icon': 'shield',
+      'color_hex': '#2ECC71',
+      'is_default': 1,
+      'is_deletable': 0,
+      'is_archived': 0,
+      'created_at': DateTime.now().toIso8601String(),
+      'updated_at': null,
+    });
   }
 
   Future<void> _removeDuplicateCategoriesFromDb(DatabaseExecutor db) async {
@@ -180,6 +383,79 @@ class DatabaseHelper {
         conflictAlgorithm: ConflictAlgorithm.ignore);
   }
 
+  // ─── GOALS ────────────────────────────────────────────────────────────────
+
+  Future<List<Goal>> getGoals({bool includeArchived = false}) async {
+    final db = await database;
+    final maps = await db.query(
+      'goals',
+      where: includeArchived ? null : 'is_archived = 0',
+      orderBy: 'is_default DESC, created_at ASC, id ASC',
+    );
+    return maps.map(Goal.fromMap).toList();
+  }
+
+  Future<Goal?> getGoalById(int id) async {
+    final db = await database;
+    final maps = await db.query(
+      'goals',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (maps.isEmpty) return null;
+    return Goal.fromMap(maps.first);
+  }
+
+  Future<Goal?> getDefaultGoal() async {
+    final db = await database;
+    final maps = await db.query(
+      'goals',
+      where: 'is_default = 1',
+      limit: 1,
+    );
+    if (maps.isEmpty) return null;
+    return Goal.fromMap(maps.first);
+  }
+
+  Future<int> insertGoal(Goal goal) async {
+    final db = await database;
+    return db.insert('goals', goal.toMap());
+  }
+
+  Future<int> updateGoal(Goal goal) async {
+    final db = await database;
+    return db.update(
+      'goals',
+      goal.toMap(),
+      where: 'id = ?',
+      whereArgs: [goal.id],
+    );
+  }
+
+  Future<int> deleteGoal(int id) async {
+    final db = await database;
+    return db.delete(
+      'goals',
+      where: 'id = ? AND is_deletable = 1',
+      whereArgs: [id],
+    );
+  }
+
+  Future<List<Transactions>> getTransactionsForGoal(
+    int goalId, {
+    bool confirmedOnly = false,
+  }) async {
+    final db = await database;
+    final maps = await db.query(
+      'transactions',
+      where: confirmedOnly ? 'goal_id = ? AND status = ?' : 'goal_id = ?',
+      whereArgs: confirmedOnly ? [goalId, 'confirmed'] : [goalId],
+      orderBy: 'effective_date ASC, id ASC',
+    );
+    return maps.map(Transactions.fromMap).toList();
+  }
+
   // ─── TRANSACTIONS ──────────────────────────────────────────────────────────
 
   Future<List<Transactions>> getTransactionsByMonth(String month) async {
@@ -187,13 +463,25 @@ class DatabaseHelper {
     final db = await database;
     final maps = await db.query(
       'transactions',
-      where: 'date LIKE ?',
+      where: 'purchase_date LIKE ?',
       whereArgs: ['$month%'],
-      orderBy: 'date DESC, id DESC',
+      orderBy: 'purchase_date DESC, id DESC',
     );
     if (kDebugMode) {
       debugPrint('Buscando mês: $month → ${maps.length} transações');
     }
+    return maps.map(Transactions.fromMap).toList();
+  }
+
+  Future<List<Transactions>> getTransactionsByEffectiveMonth(
+      String month) async {
+    final db = await database;
+    final maps = await db.query(
+      'transactions',
+      where: 'effective_date LIKE ?',
+      whereArgs: ['$month%'],
+      orderBy: 'effective_date DESC, id DESC',
+    );
     return maps.map(Transactions.fromMap).toList();
   }
 
@@ -202,12 +490,17 @@ class DatabaseHelper {
     final targetMonth = DateTime.parse('$month-01');
     final nextMonth = DateTime(targetMonth.year, targetMonth.month + 1, 1);
     final targetMonthKey = _formatMonth(targetMonth);
+    final cards = await db.query('credit_cards');
+    final cardMap = <int, CreditCards>{
+      for (final row in cards)
+        if (row['id'] != null) row['id'] as int: CreditCards.fromMap(row),
+    };
 
     final recurringMaps = await db.query(
       'transactions',
-      where: 'is_recurring = 1 AND date < ?',
+      where: 'is_recurring = 1 AND purchase_date < ?',
       whereArgs: [_formatDate(nextMonth)],
-      orderBy: 'date ASC, id ASC',
+      orderBy: 'purchase_date ASC, id ASC',
     );
     if (recurringMaps.isEmpty) return;
 
@@ -218,9 +511,12 @@ class DatabaseHelper {
         'type',
         'status',
         'description',
-        'date',
+        'purchase_date',
+        'effective_date',
         'category_id',
         'credit_cards_id',
+        'is_invoice_paid',
+        'goal_id',
         'installment_total',
         'installment_current',
         'installment_group_id',
@@ -229,17 +525,17 @@ class DatabaseHelper {
         'parent_id',
         'note',
       ],
-      where: 'is_recurring = 1 AND date LIKE ?',
+      where: 'is_recurring = 1 AND purchase_date LIKE ?',
       whereArgs: ['$targetMonthKey%'],
     );
 
     final existingKeys = existingRecurringInMonth
-        .map((row) => _buildRecurringKey(row, row['date'] as String))
+        .map((row) => _buildRecurringKey(row, row['purchase_date'] as String))
         .toSet();
 
     for (final map in recurringMaps) {
       final recurring = Transactions.fromMap(map);
-      final baseDate = DateTime.parse(recurring.date);
+      final baseDate = DateTime.parse(recurring.purchaseDate);
       final rootParentId = recurring.parentId ?? recurring.id;
       final recurringId = recurring.recurringId ??
           'legacy-${rootParentId ?? recurring.id ?? 0}';
@@ -255,9 +551,20 @@ class DatabaseHelper {
             candidateDateStr,
           );
           if (!existingKeys.contains(key)) {
+            final card = recurring.creditCardsId == null
+                ? null
+                : cardMap[recurring.creditCardsId!];
+            final effectiveDate = card == null
+                ? candidateDateStr
+                : _calculateEffectiveDateForCardPurchase(
+                    purchaseDate: candidateDateStr,
+                    closingDay: card.closingDay,
+                    dueDay: card.dueDay,
+                  );
             await db.insert('transactions', {
               ...recurring.toMap(),
-              'date': candidateDateStr,
+              'purchase_date': candidateDateStr,
+              'effective_date': effectiveDate,
               'recurring_id': recurringId,
               'parent_id': rootParentId,
             });
@@ -272,12 +579,16 @@ class DatabaseHelper {
 
   Future<int> insertTransaction(Transactions transaction) async {
     final db = await database;
-    return db.insert('transactions', transaction.toMap());
+    return db.insert(
+      'transactions',
+      await _mapTransactionForPersistence(transaction),
+    );
   }
 
   Future<int> updateTransaction(Transactions transaction) async {
     final db = await database;
-    return db.update('transactions', transaction.toMap(),
+    return db.update(
+        'transactions', await _mapTransactionForPersistence(transaction),
         where: 'id = ?', whereArgs: [transaction.id]);
   }
 
@@ -318,8 +629,8 @@ class DatabaseHelper {
 
     return db.delete(
       'transactions',
-      where: '(${clauses.join(' OR ')}) AND date >= ?',
-      whereArgs: [...args, transaction.date],
+      where: '(${clauses.join(' OR ')}) AND purchase_date >= ?',
+      whereArgs: [...args, transaction.purchaseDate],
     );
   }
 
@@ -335,7 +646,7 @@ class DatabaseHelper {
     final db = await database;
     return db.delete(
       'transactions',
-      where: 'recurring_id = ? AND date >= ?',
+      where: 'recurring_id = ? AND purchase_date >= ?',
       whereArgs: [recurringId, fromDate],
     );
   }
@@ -355,7 +666,7 @@ class DatabaseHelper {
       'transactions',
       where: 'installment_group_id = ?',
       whereArgs: [groupId],
-      orderBy: 'installment_current ASC, date ASC, id ASC',
+      orderBy: 'installment_current ASC, purchase_date ASC, id ASC',
     );
     return maps.map(Transactions.fromMap).toList();
   }
@@ -485,8 +796,8 @@ class DatabaseHelper {
       WHERE type = 'expense'
         AND credit_cards_id = ?
         AND status IN ('confirmed', 'pending')
-        AND date >= ?
-        AND date <= ?
+        AND purchase_date >= ?
+        AND purchase_date <= ?
     ''', [cardId, cycle.start, cycle.end]);
 
     return result.first['total'] as int? ?? 0;
@@ -500,19 +811,35 @@ class DatabaseHelper {
       WHERE type = 'expense'
         AND credit_cards_id = ?
         AND status IN ('confirmed', 'pending')
-        AND date LIKE ?
+        AND purchase_date LIKE ?
     ''', [cardId, '$month%']);
     return result.first['total'] as int? ?? 0;
   }
 
   // ─── BALANCE ───────────────────────────────────────────────────────────────
 
-  Future<int> getTotalExpensesForMonth(String month) async {
+  Future<int> getTotalExpensesForMonth(
+    String month, {
+    bool neutralizeGoalTransactions = false,
+    int? preservedGoalId,
+  }) async {
     final db = await database;
+    final goalClause = neutralizeGoalTransactions
+        ? preservedGoalId == null
+            ? ' AND goal_id IS NULL'
+            : ' AND (goal_id IS NULL OR goal_id = ?)'
+        : '';
+    final args = [
+      '$month%',
+      if (neutralizeGoalTransactions && preservedGoalId != null)
+        preservedGoalId,
+    ];
     final result = await db.rawQuery('''
       SELECT SUM(amount_cents) as total FROM transactions
-      WHERE type = 'expense' AND status = 'confirmed' AND date LIKE ?
-    ''', ['$month%']);
+      WHERE type = 'expense'
+        AND status = 'confirmed'
+        AND effective_date LIKE ?$goalClause
+    ''', args);
     return result.first['total'] as int? ?? 0;
   }
 
@@ -520,7 +847,7 @@ class DatabaseHelper {
     final db = await database;
     final result = await db.rawQuery('''
       SELECT SUM(amount_cents) as total FROM transactions
-      WHERE type = 'expense' AND status = 'pending' AND date LIKE ?
+      WHERE type = 'expense' AND status = 'pending' AND effective_date LIKE ?
     ''', ['$month%']);
     return result.first['total'] as int? ?? 0;
   }
@@ -529,7 +856,7 @@ class DatabaseHelper {
     final db = await database;
     final result = await db.rawQuery('''
       SELECT SUM(amount_cents) as total FROM transactions
-      WHERE type = 'income' AND status = 'confirmed' AND date LIKE ?
+      WHERE type = 'income' AND status = 'confirmed' AND effective_date LIKE ?
     ''', ['$month%']);
     return result.first['total'] as int? ?? 0;
   }
@@ -552,12 +879,12 @@ class DatabaseHelper {
     // Busca todos os meses que têm transações ANTES do mês alvo
     final result = await db.rawQuery('''
       SELECT
-        strftime('%Y-%m', date) as month,
+        strftime('%Y-%m', effective_date) as month,
         SUM(CASE WHEN type = 'income' AND status = 'confirmed' THEN amount_cents ELSE 0 END) as income,
         SUM(CASE WHEN type = 'expense' AND status = 'confirmed' THEN amount_cents ELSE 0 END) as expense
       FROM transactions
-      WHERE strftime('%Y-%m', date) < ?
-      GROUP BY strftime('%Y-%m', date)
+      WHERE strftime('%Y-%m', effective_date) < ?
+      GROUP BY strftime('%Y-%m', effective_date)
       ORDER BY month ASC
     ''', [month]);
 
@@ -578,10 +905,12 @@ class DatabaseHelper {
   Future<DateTime?> getFirstTransactionMonth() async {
     final db = await database;
     final result = await db.rawQuery('''
-      SELECT date FROM transactions ORDER BY date ASC, id ASC LIMIT 1
+      SELECT purchase_date FROM transactions
+      ORDER BY purchase_date ASC, id ASC
+      LIMIT 1
     ''');
     if (result.isEmpty) return null;
-    final rawDate = result.first['date'] as String?;
+    final rawDate = result.first['purchase_date'] as String?;
     if (rawDate == null || rawDate.isEmpty) return null;
     final date = DateTime.parse(rawDate);
     return DateTime(date.year, date.month, 1);
@@ -616,6 +945,7 @@ class DatabaseHelper {
         await txn.delete('transactions');
         await txn.delete('credit_cards');
         await txn.delete('categories');
+        await txn.delete('goals');
         await txn.delete('settings');
 
         final batch = txn.batch();
@@ -624,10 +954,11 @@ class DatabaseHelper {
               conflictAlgorithm: ConflictAlgorithm.ignore);
         }
         await batch.commit(noResult: true);
+        await _ensureDefaultGoal(txn);
 
         await txn.execute('''
           DELETE FROM sqlite_sequence
-          WHERE name IN ('transactions', 'credit_cards', 'categories')
+          WHERE name IN ('transactions', 'credit_cards', 'categories', 'goals')
         ''');
       } finally {
         await txn.execute('PRAGMA foreign_keys = ON');
@@ -648,6 +979,61 @@ class DatabaseHelper {
     return '${date.year}-$m';
   }
 
+  DateTime _safeDate(int year, int month, int day) {
+    final lastDayOfMonth = DateTime(year, month + 1, 0).day;
+    final safeDay = day.clamp(1, lastDayOfMonth);
+    return DateTime(year, month, safeDay);
+  }
+
+  String _calculateEffectiveDateForCardPurchase({
+    required String purchaseDate,
+    required int closingDay,
+    required int dueDay,
+  }) {
+    final purchase = DateTime.parse(purchaseDate);
+    final closingThisMonth =
+        _safeDate(purchase.year, purchase.month, closingDay);
+    final closingDate = purchase.isAfter(closingThisMonth)
+        ? _safeDate(purchase.year, purchase.month + 1, closingDay)
+        : closingThisMonth;
+    final dueMonthOffset = dueDay > closingDay ? 0 : 1;
+    final dueDate =
+        _safeDate(closingDate.year, closingDate.month + dueMonthOffset, dueDay);
+    return _formatDate(dueDate);
+  }
+
+  Future<Map<String, dynamic>> _mapTransactionForPersistence(
+      Transactions transaction) async {
+    final db = await database;
+    final purchaseDate = transaction.purchaseDate;
+    var effectiveDate = transaction.effectiveDate;
+
+    if (transaction.creditCardsId == null) {
+      effectiveDate = purchaseDate;
+    } else {
+      final maps = await db.query(
+        'credit_cards',
+        where: 'id = ?',
+        whereArgs: [transaction.creditCardsId],
+        limit: 1,
+      );
+      if (maps.isNotEmpty) {
+        final card = CreditCards.fromMap(maps.first);
+        effectiveDate = _calculateEffectiveDateForCardPurchase(
+          purchaseDate: purchaseDate,
+          closingDay: card.closingDay,
+          dueDay: card.dueDay,
+        );
+      }
+    }
+
+    return {
+      ...transaction.toMap(),
+      'purchase_date': purchaseDate,
+      'effective_date': effectiveDate,
+    };
+  }
+
   String _buildRecurringKey(Map<String, dynamic> map, String date) {
     return [
       map['amount_cents'],
@@ -657,6 +1043,8 @@ class DatabaseHelper {
       date,
       map['category_id'],
       map['credit_cards_id'] ?? '',
+      map['is_invoice_paid'] ?? '',
+      map['goal_id'] ?? '',
       map['installment_total'] ?? '',
       map['installment_current'] ?? '',
       map['installment_group_id'] ?? '',
