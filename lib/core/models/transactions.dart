@@ -4,9 +4,12 @@ class Transactions {
   final String type;
   final String status;
   final String? description;
-  final String date;
+  final String purchaseDate;
+  final String effectiveDate;
   final int categoryID;
   final int? creditCardsId;
+  final bool? isInvoicePaid;
+  final int? goalId;
   final int? installmentTotal;
   final int? installmentCurrent;
   final String? installmentGroupId;
@@ -17,44 +20,62 @@ class Transactions {
   final bool createdFromNotification;
   final String? createdAt;
 
-  Transactions(
-      {this.id,
-      required this.amountCents,
-      required this.type,
-      required this.status,
-      this.description,
-      required this.date,
-      required this.categoryID,
-      this.creditCardsId,
-      this.installmentTotal,
-      this.installmentCurrent,
-      this.installmentGroupId,
-      required this.isRecurring,
-      this.recurringId,
-      this.parentId,
-      this.note,
-      required this.createdFromNotification,
-      this.createdAt});
+  Transactions({
+    this.id,
+    required this.amountCents,
+    required this.type,
+    required this.status,
+    this.description,
+    String? date,
+    String? purchaseDate,
+    String? effectiveDate,
+    required this.categoryID,
+    this.creditCardsId,
+    this.isInvoicePaid,
+    this.goalId,
+    this.installmentTotal,
+    this.installmentCurrent,
+    this.installmentGroupId,
+    required this.isRecurring,
+    this.recurringId,
+    this.parentId,
+    this.note,
+    required this.createdFromNotification,
+    this.createdAt,
+  })  : purchaseDate = purchaseDate ?? date ?? '',
+        effectiveDate = effectiveDate ?? purchaseDate ?? date ?? '';
+
+  String get date => purchaseDate;
 
   factory Transactions.fromMap(Map<String, dynamic> map) {
+    final purchaseDate = (map['purchase_date'] ?? map['date']) as String?;
+    final effectiveDate = (map['effective_date'] ??
+        map['purchase_date'] ??
+        map['date']) as String?;
+
     return Transactions(
-        id: map['id'],
-        amountCents: map['amount_cents'],
-        type: map['type'],
-        status: map['status'],
-        description: map['description'],
-        date: map['date'],
-        categoryID: map['category_id'],
-        creditCardsId: map['credit_cards_id'],
-        installmentTotal: map['installment_total'],
-        installmentCurrent: map['installment_current'],
-        installmentGroupId: map['installment_group_id'],
-        isRecurring: map['is_recurring'] == 1,
-        recurringId: map['recurring_id'],
-        parentId: map['parent_id'],
-        note: map['note'],
-        createdFromNotification: map['created_from_notification'] == 1,
-        createdAt: map['created_at']);
+      id: map['id'],
+      amountCents: map['amount_cents'],
+      type: map['type'],
+      status: map['status'],
+      description: map['description'],
+      purchaseDate: purchaseDate,
+      effectiveDate: effectiveDate,
+      categoryID: map['category_id'],
+      creditCardsId: map['credit_cards_id'],
+      isInvoicePaid:
+          map['is_invoice_paid'] == null ? null : map['is_invoice_paid'] == 1,
+      goalId: map['goal_id'],
+      installmentTotal: map['installment_total'],
+      installmentCurrent: map['installment_current'],
+      installmentGroupId: map['installment_group_id'],
+      isRecurring: map['is_recurring'] == 1,
+      recurringId: map['recurring_id'],
+      parentId: map['parent_id'],
+      note: map['note'],
+      createdFromNotification: map['created_from_notification'] == 1,
+      createdAt: map['created_at'],
+    );
   }
 
   Map<String, dynamic> toMap() {
@@ -63,9 +84,13 @@ class Transactions {
       'type': type,
       'status': status,
       'description': description,
-      'date': date,
+      'purchase_date': purchaseDate,
+      'effective_date': effectiveDate,
       'category_id': categoryID,
       'credit_cards_id': creditCardsId,
+      'is_invoice_paid':
+          isInvoicePaid == null ? null : (isInvoicePaid! ? 1 : 0),
+      'goal_id': goalId,
       'installment_total': installmentTotal,
       'installment_current': installmentCurrent,
       'installment_group_id': installmentGroupId,
@@ -74,7 +99,7 @@ class Transactions {
       'parent_id': parentId,
       'note': note,
       'created_from_notification': createdFromNotification ? 1 : 0,
-      'created_at': createdAt
+      'created_at': createdAt,
     };
   }
 }

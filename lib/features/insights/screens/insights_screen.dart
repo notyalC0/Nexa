@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
+import 'package:intl/intl.dart';
 import 'package:nexa/core/theme/app_theme.dart';
 import 'package:nexa/core/utils/currency_formatter.dart';
 import 'package:nexa/core/widgets/app_shimmer.dart';
+import 'package:nexa/features/goals/models/goal_progress.dart';
 import 'package:nexa/features/insights/providers/analytics_provider.dart';
 import 'package:nexa/features/transactions/providers/transactions_provider.dart';
 
@@ -91,6 +93,20 @@ IconData _categoryIcon(String name) {
     'category': Icons.category_rounded,
   };
   return map[name] ?? Icons.category_rounded;
+}
+
+IconData _goalIcon(String name) {
+  const map = <String, IconData>{
+    'shield': Icons.shield_rounded,
+    'flag': Icons.flag_rounded,
+    'home': Icons.home_rounded,
+    'flight': Icons.flight_rounded,
+    'directions_car': Icons.directions_car_rounded,
+    'school': Icons.school_rounded,
+    'favorite': Icons.favorite_rounded,
+    'payments': Icons.payments_rounded,
+  };
+  return map[name] ?? Icons.flag_rounded;
 }
 
 // Navega para o mês anterior
@@ -379,11 +395,11 @@ class _InsightsContent extends StatelessWidget {
               const Gap(22),
             ],
 
-            // ── 6. Reserva de emergência ────────────────────────────
-            if (data.hasEmergencyGoal) ...[
-              _SectionLabel('Reserva de emergência'),
+            // ── 6. Metas ────────────────────────────────────────────
+            if (data.hasGoals) ...[
+              _SectionLabel('Metas'),
               const Gap(10),
-              _EmergencyCard(data: data),
+              _GoalsCard(goals: data.goals),
               const Gap(22),
             ],
           ],
@@ -1088,119 +1104,164 @@ class _BudgetCard extends StatelessWidget {
   }
 }
 
-// ─── _EmergencyCard ───────────────────────────────────────────────────────────
+// ─── _GoalsCard ───────────────────────────────────────────────────────────────
 
-class _EmergencyCard extends StatelessWidget {
-  final AnalyticsData data;
-  const _EmergencyCard({required this.data});
+class _GoalsCard extends StatelessWidget {
+  final List<GoalProgress> goals;
+
+  const _GoalsCard({required this.goals});
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final pct = data.emergencyProgress.clamp(0.0, 1.0);
-    final reached = data.emergencyProgress >= 1.0;
-    final pctDisplay = (data.emergencyProgress * 100).round();
-
-    const goalColor = Color(0xFF4D96FF);
 
     return _Card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Meta',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: cs.onSurface.withAlpha(130),
-                      fontWeight: FontWeight.w500,
+          ...goals.asMap().entries.map((entry) {
+            final index = entry.key;
+            final goal = entry.value;
+            final color = _hexColor(goal.goal.colorHex);
+            final reached = goal.isReached;
+            final pct = goal.progress.clamp(0.0, 1.0);
+            final pctDisplay = (goal.progress * 100).round();
+            final estimateLabel = reached
+                ? 'Meta atingida'
+                : goal.estimatedReachDate == null
+                    ? 'Estimativa: n/a'
+                    : 'Estimativa: ${DateFormat('MM/yyyy').format(goal.estimatedReachDate!)}';
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (index > 0)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child:
+                        Divider(color: cs.onSurface.withAlpha(12), height: 1),
+                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: color.withAlpha(22),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              _goalIcon(goal.goal.icon),
+                              color: color,
+                              size: 20,
+                            ),
+                          ),
+                          const Gap(12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        goal.goal.name,
+                                        style: AppTheme.titleStyle(
+                                          context,
+                                          fontSize: 16,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    if (goal.goal.isDefault) ...[
+                                      const Gap(8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: color.withAlpha(18),
+                                          borderRadius:
+                                              BorderRadius.circular(99),
+                                        ),
+                                        child: Text(
+                                          'Reserva',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w700,
+                                            color: color,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                                const Gap(3),
+                                Text(
+                                  'Atual ${CurrencyFormatter.format(goal.currentAmountCents)} de ${CurrencyFormatter.format(goal.goal.targetAmountCents)}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: cs.onSurface.withAlpha(150),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Gap(12),
+                    Text(
+                      reached ? 'OK' : '$pctDisplay%',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: reached ? const Color(0xFF2ECC71) : color,
+                      ),
+                    ),
+                  ],
+                ),
+                const Gap(14),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(99),
+                  child: LinearProgressIndicator(
+                    value: pct,
+                    minHeight: 10,
+                    backgroundColor: cs.onSurface.withAlpha(18),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      reached ? const Color(0xFF2ECC71) : color,
                     ),
                   ),
-                  const Gap(2),
-                  Text(
-                    CurrencyFormatter.format(data.emergencyGoalCents),
-                    style: AppTheme.titleStyle(context, fontSize: 17),
-                  ),
-                ],
-              ),
-              if (reached)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2ECC71).withAlpha(30),
-                    borderRadius: BorderRadius.circular(99),
-                    border: Border.all(
-                        color: const Color(0xFF2ECC71).withAlpha(80)),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.check_circle_rounded,
-                          size: 14, color: Color(0xFF2ECC71)),
-                      Gap(4),
-                      Text(
-                        'Atingida!',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF2ECC71),
-                        ),
+                ),
+                const Gap(10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Faltam: ${CurrencyFormatter.format(goal.remainingCents)}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurface.withAlpha(150),
                       ),
-                    ],
-                  ),
-                )
-              else
-                Text(
-                  '$pctDisplay%',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    color: goalColor,
-                    letterSpacing: -0.5,
-                  ),
+                    ),
+                    Text(
+                      estimateLabel,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurface.withAlpha(150),
+                      ),
+                    ),
+                  ],
                 ),
-            ],
-          ),
-          const Gap(16),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(99),
-            child: LinearProgressIndicator(
-              value: pct,
-              minHeight: 10,
-              backgroundColor: cs.onSurface.withAlpha(18),
-              valueColor: AlwaysStoppedAnimation<Color>(
-                reached ? const Color(0xFF2ECC71) : goalColor,
-              ),
-            ),
-          ),
-          const Gap(10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Guardado: ${CurrencyFormatter.format(data.emergencyCurrentCents)}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: cs.onSurface.withAlpha(150),
-                ),
-              ),
-              if (!reached)
-                Text(
-                  'Faltam: ${CurrencyFormatter.format(data.emergencyGoalCents - data.emergencyCurrentCents)}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: cs.onSurface.withAlpha(150),
-                  ),
-                ),
-            ],
-          ),
+              ],
+            );
+          }),
         ],
       ),
     );

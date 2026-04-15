@@ -11,8 +11,10 @@ import 'package:nexa/core/theme/app_theme.dart';
 import 'package:nexa/core/utils/currency_formatter.dart';
 import 'package:nexa/core/utils/input_masks.dart';
 import 'package:nexa/features/cards/providers/cards_provider.dart';
+import 'package:nexa/features/goals/providers/goals_provider.dart';
 import 'package:nexa/features/home/provider/balance_provider.dart';
 import 'package:nexa/features/home/provider/health_score_provider.dart';
+import 'package:nexa/features/insights/providers/analytics_provider.dart';
 import 'package:nexa/features/settings/providers/app_settings_provider.dart';
 import 'package:nexa/features/settings/widgets/settings_widget.dart';
 import 'package:nexa/features/transactions/providers/transactions_provider.dart';
@@ -92,7 +94,7 @@ class SettingsScreen extends ConsumerWidget {
                           border: Border.all(color: cs.primary.withAlpha(38)),
                         ),
                         child: Text(
-                          'Versão 1.3.0',
+                          'Versão 1.4.0',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
@@ -469,6 +471,9 @@ class SettingsScreen extends ConsumerWidget {
                 ..invalidate(creditCardProvider)
                 ..invalidate(balanceProvider)
                 ..invalidate(healthScoreProvider)
+                ..invalidate(goalsProvider)
+                ..invalidate(defaultGoalProgressProvider)
+                ..invalidate(analyticsProvider)
                 ..invalidate(appSettingsProvider);
               if (ctx.mounted) Navigator.pop(ctx);
             },
@@ -572,36 +577,14 @@ class SettingsScreen extends ConsumerWidget {
               ),
             ),
             SettingsTile(
-              icon: Icons.savings_rounded,
-              title: 'Meta da reserva de emergência',
-              subtitle: settings.emergencyGoalCents == 0
-                  ? 'Não configurado'
-                  : CurrencyFormatter.format(settings.emergencyGoalCents),
-              trailing: Icon(Icons.chevron_right_rounded,
-                  color: cs.onSurface.withAlpha(89)),
-              onTap: () => _showFinancialSheet(
-                context,
-                ref,
-                'emergency_goal_cents',
-                'Meta da reserva',
-                settings.emergencyGoalCents,
+              icon: Icons.flag_rounded,
+              title: 'Metas financeiras',
+              subtitle: 'Crie e acompanhe metas na aba Metas',
+              trailing: Icon(
+                Icons.chevron_right_rounded,
+                color: cs.onSurface.withAlpha(89),
               ),
-            ),
-            SettingsTile(
-              icon: Icons.savings_outlined,
-              title: 'Reserva atual',
-              subtitle: settings.emergencyCurrentCents == 0
-                  ? 'Não configurado'
-                  : CurrencyFormatter.format(settings.emergencyCurrentCents),
-              trailing: Icon(Icons.chevron_right_rounded,
-                  color: cs.onSurface.withAlpha(89)),
-              onTap: () => _showFinancialSheet(
-                context,
-                ref,
-                'emergency_current_cents',
-                'Reserva atual',
-                settings.emergencyCurrentCents,
-              ),
+              onTap: null,
             ),
             const Gap(24),
 
@@ -623,55 +606,56 @@ class SettingsScreen extends ConsumerWidget {
 
             // ── Notificações (apenas Android/iOS) ────────────────────
             if (NotificationService.instance.isSupported) ...[
-            const SettingsSectionHeader(label: 'Notificações'),
-            const Gap(10),
-            SettingsTile(
-              icon: Icons.notifications_rounded,
-              title: 'Notificações',
-              subtitle: 'Alertas diários para registrar seus gastos',
-              trailing: Switch(
-                value: settings.notificationsEnabled,
-                onChanged: (v) async {
-                  await ref
-                      .read(appSettingsProvider.notifier)
-                      .saveBoolSetting('notifications_enabled', v);
-                  if (v) {
-                    final granted =
-                        await NotificationService.instance.requestPermissions();
-                    if (granted) {
-                      await NotificationService.instance.scheduleDailyReminder(
-                        hour: settings.reminderHour,
-                        minute: settings.reminderMinute,
-                      );
-                    } else if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        AppTheme.snackBar(
-                          context,
-                          message:
-                              'Permissão negada. Habilite nas configurações do sistema.',
-                          icon: Icons.notifications_off_rounded,
-                        ),
-                      );
-                    }
-                  } else {
-                    await NotificationService.instance.cancelDailyReminder();
-                  }
-                },
-              ),
-            ),
-            if (settings.notificationsEnabled) ...[
-              const Gap(2),
+              const SettingsSectionHeader(label: 'Notificações'),
+              const Gap(10),
               SettingsTile(
-                icon: Icons.access_time_rounded,
-                title: 'Horário do lembrete',
-                subtitle:
-                    'Diariamente às ${settings.reminderHour.toString().padLeft(2, '0')}:${settings.reminderMinute.toString().padLeft(2, '0')}',
-                trailing: Icon(Icons.chevron_right_rounded,
-                    color: cs.onSurface.withAlpha(89)),
-                onTap: () => _showTimePicker(context, ref, settings),
+                icon: Icons.notifications_rounded,
+                title: 'Notificações',
+                subtitle: 'Alertas diários para registrar seus gastos',
+                trailing: Switch(
+                  value: settings.notificationsEnabled,
+                  onChanged: (v) async {
+                    await ref
+                        .read(appSettingsProvider.notifier)
+                        .saveBoolSetting('notifications_enabled', v);
+                    if (v) {
+                      final granted = await NotificationService.instance
+                          .requestPermissions();
+                      if (granted) {
+                        await NotificationService.instance
+                            .scheduleDailyReminder(
+                          hour: settings.reminderHour,
+                          minute: settings.reminderMinute,
+                        );
+                      } else if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          AppTheme.snackBar(
+                            context,
+                            message:
+                                'Permissão negada. Habilite nas configurações do sistema.',
+                            icon: Icons.notifications_off_rounded,
+                          ),
+                        );
+                      }
+                    } else {
+                      await NotificationService.instance.cancelDailyReminder();
+                    }
+                  },
+                ),
               ),
-            ],
-            const Gap(24),
+              if (settings.notificationsEnabled) ...[
+                const Gap(2),
+                SettingsTile(
+                  icon: Icons.access_time_rounded,
+                  title: 'Horário do lembrete',
+                  subtitle:
+                      'Diariamente às ${settings.reminderHour.toString().padLeft(2, '0')}:${settings.reminderMinute.toString().padLeft(2, '0')}',
+                  trailing: Icon(Icons.chevron_right_rounded,
+                      color: cs.onSurface.withAlpha(89)),
+                  onTap: () => _showTimePicker(context, ref, settings),
+                ),
+              ],
+              const Gap(24),
             ], // if (NotificationService.instance.isSupported)
 
             // ── Categorias ────────────────────────────────────────────
@@ -708,7 +692,7 @@ class SettingsScreen extends ConsumerWidget {
             SettingsTile(
               icon: Icons.info_outline_rounded,
               title: 'Sobre o Nexa',
-              subtitle: 'Versão 1.3.0',
+              subtitle: 'Versão 1.4.0',
               trailing: Icon(Icons.chevron_right_rounded,
                   color: cs.onSurface.withAlpha(89)),
               onTap: () => _showAboutDialog(context),

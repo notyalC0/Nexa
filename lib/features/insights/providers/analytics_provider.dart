@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nexa/core/database/database_helper.dart';
+import 'package:nexa/features/goals/models/goal_progress.dart';
+import 'package:nexa/features/goals/providers/goals_provider.dart';
 import 'package:nexa/features/settings/providers/app_settings_provider.dart';
 import 'package:nexa/features/transactions/providers/transactions_provider.dart';
 
@@ -49,21 +51,19 @@ class AnalyticsData {
   final List<MonthlyTrend> trend; // últimos 6 meses
   final List<CategoryExpense> topCategories; // top 6 do mês selecionado
   final List<CardExpense> cardExpenses; // gastos por cartão no mês
+  final List<GoalProgress> goals;
   final int currentIncomeCents;
   final int currentExpensesCents;
   final int salaryCents;
-  final int emergencyGoalCents;
-  final int emergencyCurrentCents;
 
   const AnalyticsData({
     required this.trend,
     required this.topCategories,
     required this.cardExpenses,
+    required this.goals,
     required this.currentIncomeCents,
     required this.currentExpensesCents,
     required this.salaryCents,
-    required this.emergencyGoalCents,
-    required this.emergencyCurrentCents,
   });
 
   /// Saldo = receita - despesa do mês selecionado
@@ -81,12 +81,8 @@ class AnalyticsData {
   double get expenseToSalaryRatio =>
       salaryCents == 0 ? 0 : currentExpensesCents / salaryCents;
 
-  /// Percentual da reserva de emergência atingida (0.0–1.0+)
-  double get emergencyProgress =>
-      emergencyGoalCents == 0 ? 0 : emergencyCurrentCents / emergencyGoalCents;
-
   bool get hasSalary => salaryCents > 0;
-  bool get hasEmergencyGoal => emergencyGoalCents > 0;
+  bool get hasGoals => goals.isNotEmpty;
   bool get hasCardExpenses => cardExpenses.isNotEmpty;
 }
 
@@ -97,8 +93,11 @@ final analyticsProvider = FutureProvider<AnalyticsData>((ref) async {
 
   // Assiste transações para reconstruir quando houver alterações
   await ref.watch(transactionsProvider.future);
+  final goals = await ref.watch(goalsProvider.future);
 
   final db = DatabaseHelper.instance;
+  final defaultGoal = goals.where((goal) => goal.goal.isDefault).firstOrNull;
+  final preservedGoalId = defaultGoal?.goal.id;
 
   // ── Tendência: últimos 6 meses (sempre relativo ao mês atual real) ──────
   final now = DateTime.now();
@@ -107,7 +106,11 @@ final analyticsProvider = FutureProvider<AnalyticsData>((ref) async {
     final dt = DateTime(now.year, now.month - i, 1);
     final month = '${dt.year}-${dt.month.toString().padLeft(2, '0')}';
     final income = await db.getTotalIncomeForMonth(month);
-    final expenses = await db.getTotalExpensesForMonth(month);
+    final expenses = await db.getTotalExpensesForMonth(
+      month,
+      neutralizeGoalTransactions: true,
+      preservedGoalId: preservedGoalId,
+    );
     trend.add(MonthlyTrend(
       month: month,
       incomeCents: income,
@@ -116,13 +119,14 @@ final analyticsProvider = FutureProvider<AnalyticsData>((ref) async {
   }
 
   // ── Gastos por categoria no mês selecionado ───────────────────────────
-  final transactions = await db.getTransactionsByMonth(currentMonth);
+  final transactions = await db.getTransactionsByEffectiveMonth(currentMonth);
   final categories = await db.getCategories();
   final categoryMap = {for (final c in categories) c.id: c};
 
   final totals = <int, int>{};
   for (final t in transactions) {
     if (t.type == 'expense' && t.status == 'confirmed') {
+      if (t.goalId != null && t.goalId != preservedGoalId) continue;
       totals[t.categoryID] = (totals[t.categoryID] ?? 0) + t.amountCents;
     }
   }
@@ -150,6 +154,7 @@ final analyticsProvider = FutureProvider<AnalyticsData>((ref) async {
     if (t.type == 'expense' &&
         t.status == 'confirmed' &&
         t.creditCardsId != null) {
+      if (t.goalId != null && t.goalId != preservedGoalId) continue;
       cardTotals[t.creditCardsId!] =
           (cardTotals[t.creditCardsId!] ?? 0) + t.amountCents;
     }
@@ -171,22 +176,23 @@ final analyticsProvider = FutureProvider<AnalyticsData>((ref) async {
 
   // ── Resumo do mês selecionado ─────────────────────────────────────────
   final currentIncome = await db.getTotalIncomeForMonth(currentMonth);
-  final currentExpenses = await db.getTotalExpensesForMonth(currentMonth);
+  final currentExpenses = await db.getTotalExpensesForMonth(
+    currentMonth,
+    neutralizeGoalTransactions: true,
+    preservedGoalId: preservedGoalId,
+  );
 
   // ── Settings — assistidas para reagir a mudanças ─────────────────────
   final settingsAsync = await ref.watch(appSettingsProvider.future);
   final salary = settingsAsync.salaryCents;
-  final emergencyGoal = settingsAsync.emergencyGoalCents;
-  final emergencyCurrent = settingsAsync.emergencyCurrentCents;
 
   return AnalyticsData(
     trend: trend,
     topCategories: topCategories.take(6).toList(),
     cardExpenses: cardExpenses,
+    goals: goals,
     currentIncomeCents: currentIncome,
     currentExpensesCents: currentExpenses,
     salaryCents: salary,
-    emergencyGoalCents: emergencyGoal,
-    emergencyCurrentCents: emergencyCurrent,
   );
 });

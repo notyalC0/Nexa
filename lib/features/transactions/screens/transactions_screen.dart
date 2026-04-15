@@ -7,6 +7,7 @@ import 'package:nexa/core/theme/app_theme.dart';
 import 'package:nexa/core/widgets/app_empty_state.dart';
 import 'package:nexa/features/cards/providers/cards_provider.dart';
 import 'package:nexa/features/home/provider/balance_provider.dart';
+import 'package:nexa/features/goals/providers/goals_provider.dart';
 import 'package:nexa/features/home/provider/health_score_provider.dart';
 import 'package:nexa/features/insights/providers/analytics_provider.dart';
 import 'package:nexa/features/transactions/providers/transactions_filter_provider.dart';
@@ -127,6 +128,8 @@ class _TransactionsListPageState extends ConsumerState<TransactionsListPage> {
     ref.invalidate(balanceProvider);
     ref.invalidate(cardLimitDetailsProvider);
     ref.invalidate(analyticsProvider);
+    ref.invalidate(goalsProvider);
+    ref.invalidate(defaultGoalProgressProvider);
   }
 
   /// Remove um item da lista com animação de saída.
@@ -160,10 +163,6 @@ class _TransactionsListPageState extends ConsumerState<TransactionsListPage> {
   void _syncList(List<Transactions> newFiltered) {
     // Constrói estruturas O(1) de lookup uma única vez para evitar O(n²).
     final newIdSet = <int?>{for (final t in newFiltered) t.id};
-    final newIdToItem = <int?, Transactions>{
-      for (final t in newFiltered) t.id: t,
-    };
-
     // Detecta remoções (itens no old que não estão no new)
     for (int i = _currentFiltered.length - 1; i >= 0; i--) {
       if (!newIdSet.contains(_currentFiltered[i].id)) {

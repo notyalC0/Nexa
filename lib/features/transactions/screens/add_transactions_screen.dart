@@ -6,8 +6,11 @@ import 'package:intl/intl.dart';
 import 'package:nexa/core/database/database_helper.dart';
 import 'package:nexa/core/models/credit_cards.dart';
 import 'package:nexa/core/theme/app_theme.dart';
+import 'package:nexa/core/utils/currency_formatter.dart';
 import 'package:nexa/core/utils/input_masks.dart';
 import 'package:nexa/features/cards/providers/cards_provider.dart';
+import 'package:nexa/features/goals/models/goal_progress.dart';
+import 'package:nexa/features/goals/providers/goals_provider.dart';
 import 'package:nexa/features/cards/screens/card_screen.dart';
 import 'package:nexa/features/home/provider/balance_provider.dart';
 import 'package:nexa/features/home/provider/health_score_provider.dart';
@@ -20,8 +23,10 @@ import '../../../core/models/transactions.dart';
 
 class AddTransactionsScreen extends ConsumerStatefulWidget {
   final Transactions? transaction;
+  final int? initialGoalId;
 
-  const AddTransactionsScreen({super.key, this.transaction});
+  const AddTransactionsScreen(
+      {super.key, this.transaction, this.initialGoalId});
 
   @override
   ConsumerState<AddTransactionsScreen> createState() =>
@@ -45,6 +50,7 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
   String? _selectedDateForDb;
   int? _selectedCardId;
   int? _selectedCategoryId;
+  int? _selectedGoalId;
   bool _isRecurring = false;
   bool _triedToSave = false;
 
@@ -72,6 +78,7 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
       _selectedStatus = tx.status;
       _selectedCardId = tx.creditCardsId;
       _selectedCategoryId = tx.categoryID;
+      _selectedGoalId = tx.goalId;
       _descriptionController.text = tx.description ?? '';
       _noteController.text = tx.note ?? '';
       _isRecurring = tx.isRecurring;
@@ -100,6 +107,8 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
     } else {
       // Modo criação: valores padrão
       _selectedStatus = 'confirmed';
+      _selectedType = widget.initialGoalId != null ? 'expense' : null;
+      _selectedGoalId = widget.initialGoalId;
       _installmentCurrentController.text = '1';
       final now = DateTime.now();
       _selectedDateForDb = DateFormat('yyyy-MM-dd').format(now);
@@ -152,6 +161,8 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
     ref.invalidate(balanceProvider);
     ref.invalidate(cardLimitDetailsProvider);
     ref.invalidate(analyticsProvider);
+    ref.invalidate(goalsProvider);
+    ref.invalidate(defaultGoalProgressProvider);
   }
 
   Future<void> _save() async {
@@ -211,6 +222,7 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
           date: DateFormat('yyyy-MM-dd').format(parcelaDate),
           categoryID: categoryId,
           creditCardsId: _selectedCardId,
+          goalId: _selectedType == 'expense' ? _selectedGoalId : null,
           installmentTotal: totalParcelas,
           installmentCurrent: i + 1,
           installmentGroupId: groupId,
@@ -245,6 +257,7 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
             date: inst.date,
             categoryID: categoryId,
             creditCardsId: _selectedCardId,
+            goalId: _selectedType == 'expense' ? _selectedGoalId : null,
             installmentTotal: installments.length,
             installmentCurrent: i + 1,
             installmentGroupId: widget.transaction!.installmentGroupId,
@@ -276,6 +289,7 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
             _dateController.text,
         categoryID: categoryId,
         creditCardsId: _selectedCardId,
+        goalId: _selectedType == 'expense' ? _selectedGoalId : null,
         installmentTotal: totalParcelas > 1 ? totalParcelas : null,
         installmentCurrent: totalParcelas > 1 ? parcelaAtual : null,
         installmentGroupId:
@@ -403,6 +417,33 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
     );
     if (selected == null) return;
     setState(() => _selectedCategoryId = selected);
+  }
+
+  Future<void> _openGoalPicker(List<GoalProgress> goals) async {
+    final initial =
+        goals.any((g) => g.goal.id == _selectedGoalId) ? _selectedGoalId : -1;
+    final selected = await _showChoiceSheet<int>(
+      title: 'Selecionar meta',
+      selectedValue: initial,
+      choices: [
+        const _PickerChoice(
+          value: -1,
+          label: 'Nenhuma meta',
+          icon: Icons.flag_outlined,
+        ),
+        ...goals.map(
+          (goal) => _PickerChoice<int>(
+            value: goal.goal.id ?? -1,
+            label: goal.goal.name,
+            subtitle:
+                'Atual ${CurrencyFormatter.format(goal.currentAmountCents)} de ${CurrencyFormatter.format(goal.goal.targetAmountCents)}',
+            icon: Icons.flag_rounded,
+          ),
+        ),
+      ],
+    );
+    if (selected == null) return;
+    setState(() => _selectedGoalId = selected == -1 ? null : selected);
   }
 
   Future<T?> _showChoiceSheet<T>({
@@ -538,6 +579,7 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
     final cs = Theme.of(context).colorScheme;
     final cardsAsync = ref.watch(creditCardProvider);
     final categoriesAsync = ref.watch(categoriesProvider);
+    final goalsAsync = ref.watch(goalsProvider);
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -628,6 +670,7 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
                   child: GestureDetector(
                     onTap: () => setState(() {
                       _selectedType = type.value;
+                      if (_selectedType != 'expense') _selectedGoalId = null;
                       _triedToSave = false;
                     }),
                     child: AnimatedContainer(
@@ -834,6 +877,34 @@ class _AddTransactionsScreenState extends ConsumerState<AddTransactionsScreen> {
                 );
               },
             ),
+            if (_selectedType == 'expense') ...[
+              const Gap(14),
+              goalsAsync.when(
+                loading: () => _selectionField(
+                  label: 'Meta',
+                  icon: Icons.flag_rounded,
+                  text: 'Carregando...',
+                  onTap: null,
+                ),
+                error: (_, __) => _selectionField(
+                  label: 'Meta',
+                  icon: Icons.flag_rounded,
+                  text: 'Erro ao carregar',
+                  onTap: null,
+                ),
+                data: (goals) {
+                  final selectedGoal = goals
+                      .where((goal) => goal.goal.id == _selectedGoalId)
+                      .firstOrNull;
+                  return _selectionField(
+                    label: 'Meta',
+                    icon: Icons.flag_rounded,
+                    text: selectedGoal?.goal.name ?? 'Nenhuma meta',
+                    onTap: goals.isEmpty ? null : () => _openGoalPicker(goals),
+                  );
+                },
+              ),
+            ],
             const Gap(24),
 
             // ── Parcelamento (somente com cartão) ─────────────────────
