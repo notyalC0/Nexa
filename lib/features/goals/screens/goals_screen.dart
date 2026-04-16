@@ -464,7 +464,7 @@ class _GoalCard extends StatelessWidget {
     final estimateLabel = goal.isReached
         ? 'Meta atingida'
         : goal.estimatedReachDate == null
-            ? 'Sem estimativa ainda'
+            ? 'Estimativa: n/a'
             : 'Estimativa: ${DateFormat('MM/yyyy').format(goal.estimatedReachDate!)}';
 
     return Container(

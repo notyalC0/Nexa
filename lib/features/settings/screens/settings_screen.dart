@@ -40,105 +40,204 @@ class SettingsScreen extends ConsumerWidget {
 
   void _showAboutDialog(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+
+    // Lista padronizada para facilitar atualizações futuras
+    final List<Map<String, dynamic>> changelogs = [
+      {
+        'version': '1.4.0',
+        'title': 'Metas & Lógica',
+        'items': [
+          'Nova aba dedicada de Metas Financeiras',
+          'Saldo real por competência (Data compra vs impacto)',
+          'Cálculo automático de ciclo de cartão de crédito',
+          'Schema de banco de dados atualizado para v4'
+        ]
+      },
+      {
+        'version': '1.3.0',
+        'title': 'Análise & UX',
+        'items': [
+          'Dashboard analítico com gráficos de evolução',
+          'Perfil editável com avatares da galeria',
+          'Nova Splash Screen e animações de entrada',
+          'Badges visuais para categorias e cartões'
+        ]
+      },
+      {
+        'version': '1.1.0',
+        'title': 'Base & Estabilidade',
+        'items': [
+          'Automação de transações recorrentes mensais',
+          'Lógica de limites dinâmicos para cartões',
+          'Gestão de categorias com fallback automático',
+          'Otimização de performance com Riverpod'
+        ]
+      },
+    ];
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         insetPadding: const EdgeInsets.symmetric(horizontal: 24),
         contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
         actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [cs.primary, cs.primary.withAlpha(204)],
-                    ),
-                    borderRadius: BorderRadius.circular(18),
-                    boxShadow: [
-                      BoxShadow(
-                        color: cs.primary.withAlpha(51),
-                        blurRadius: 18,
-                        offset: const Offset(0, 10),
+        content: SizedBox(
+          width: MediaQuery.of(context).size.width,
+          child: Column(
+            mainAxisSize: MainAxisSize.min, // Ocupa apenas o espaço necessário
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header do App
+              Row(
+                children: [
+                  Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [cs.primary, cs.primary.withAlpha(204)],
                       ),
-                    ],
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Icon(Icons.account_balance_wallet_rounded,
+                        color: cs.onPrimary, size: 32),
                   ),
-                  child: Icon(Icons.account_balance_wallet_rounded,
-                      color: cs.onPrimary, size: 32),
-                ),
-                const Gap(16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Nexa',
-                          style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w800,
-                              color: cs.onSurface)),
-                      const Gap(6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: cs.primary.withAlpha(20),
-                          borderRadius:
-                              BorderRadius.circular(AppTheme.radiusChip),
-                          border: Border.all(color: cs.primary.withAlpha(38)),
-                        ),
-                        child: Text(
-                          'Versão 1.4.0',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: cs.primary,
+                  const Gap(16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Nexa',
+                            style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w800,
+                                color: cs.onSurface)),
+                        const Gap(6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: cs.primary.withAlpha(20),
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusChip),
+                            border: Border.all(color: cs.primary.withAlpha(38)),
+                          ),
+                          child: Text(
+                            'Versão 1.4.0',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: cs.primary,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const Gap(20),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: cs.surfaceContainerHighest.withAlpha(90),
-                borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-                border: Border.all(color: cs.onSurface.withAlpha(20)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Controle financeiro pessoal simples e eficiente.',
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: cs.onSurface,
-                        height: 1.4),
-                  ),
-                  const Gap(8),
-                  Text(
-                    'Organize cartões, acompanhe transações e acompanhe sua saúde financeira em um fluxo rápido e consistente.',
-                    style: TextStyle(
-                        fontSize: 13,
-                        color: cs.onSurface.withAlpha(166),
-                        height: 1.5),
+                      ],
+                    ),
                   ),
                 ],
               ),
-            ),
-          ],
+              const Gap(20),
+
+              // Card de Descrição
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerHighest.withAlpha(90),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+                  border: Border.all(color: cs.onSurface.withAlpha(20)),
+                ),
+                child: Text(
+                  'Controle financeiro pessoal simples e eficiente.',
+                  style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: cs.onSurface,
+                      height: 1.4),
+                ),
+              ),
+
+              const Gap(24),
+              Text('O que há de novo',
+                  style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: cs.onSurface)),
+              const Gap(12),
+
+              // Seção de Novidades com Scroll Dinâmico
+              Flexible(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(context).size.height * 0.35,
+                  ),
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    child: Column(
+                      children: changelogs
+                          .map((log) => Padding(
+                                padding: const EdgeInsets.only(bottom: 16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Text(log['version'],
+                                            style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w900,
+                                                color: cs.primary)),
+                                        const Gap(8),
+                                        Text(log['title'],
+                                            style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700,
+                                                color: cs.onSurface
+                                                    .withAlpha(180))),
+                                      ],
+                                    ),
+                                    const Gap(8),
+                                    ...List.generate(
+                                        log['items'].length,
+                                        (i) => Padding(
+                                              padding: const EdgeInsets.only(
+                                                  left: 4, bottom: 4),
+                                              child: Row(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                            top: 6),
+                                                    child: Icon(Icons.circle,
+                                                        size: 4,
+                                                        color: cs.primary),
+                                                  ),
+                                                  const Gap(10),
+                                                  Expanded(
+                                                    child: Text(log['items'][i],
+                                                        style: TextStyle(
+                                                            fontSize: 12,
+                                                            color: cs.onSurface
+                                                                .withAlpha(160),
+                                                            height: 1.3)),
+                                                  ),
+                                                ],
+                                              ),
+                                            )),
+                                  ],
+                                ),
+                              ))
+                          .toList(),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
           SizedBox(
