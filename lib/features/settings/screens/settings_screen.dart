@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:nexa/core/database/database_helper.dart';
-import 'package:nexa/core/models/categories.dart';
 import 'package:nexa/core/notifications/notification_service.dart';
 import 'package:nexa/core/theme/app_theme.dart';
 import 'package:nexa/core/utils/currency_formatter.dart';
@@ -16,6 +15,7 @@ import 'package:nexa/features/home/provider/balance_provider.dart';
 import 'package:nexa/features/home/provider/health_score_provider.dart';
 import 'package:nexa/features/insights/providers/analytics_provider.dart';
 import 'package:nexa/features/settings/providers/app_settings_provider.dart';
+import 'package:nexa/features/settings/screens/category_management_screen.dart';
 import 'package:nexa/features/settings/widgets/settings_widget.dart';
 import 'package:nexa/features/transactions/providers/transactions_provider.dart';
 
@@ -43,6 +43,16 @@ class SettingsScreen extends ConsumerWidget {
 
     // Lista padronizada para facilitar atualizações futuras
     final List<Map<String, dynamic>> changelogs = [
+      {
+        'version': '1.5.0',
+        'title': 'Categorias & Metas',
+        'items': [
+          'Nova tela para gerenciar categorias personalizadas',
+          'Edição e exclusão de categorias sem perder o histórico',
+          'Metas por categoria com limite mensal e progresso no Insights',
+          'Schema de banco de dados atualizado para v5'
+        ]
+      },
       {
         'version': '1.4.0',
         'title': 'Metas & Lógica',
@@ -125,7 +135,7 @@ class SettingsScreen extends ConsumerWidget {
                             border: Border.all(color: cs.primary.withAlpha(38)),
                           ),
                           child: Text(
-                            'Versão 1.4.0',
+                            'Versão 1.5.0',
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
@@ -375,148 +385,6 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _showManageCategoriesDialog(
-    BuildContext context,
-    WidgetRef ref,
-  ) async {
-    final cs = Theme.of(context).colorScheme;
-    final controller = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-        contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-        actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: cs.primary.withAlpha(20),
-                borderRadius: BorderRadius.circular(AppTheme.radiusChip),
-              ),
-              child: Icon(Icons.category_rounded, color: cs.primary, size: 20),
-            ),
-            const Gap(12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Nova categoria',
-                      style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: cs.onSurface)),
-                  const Gap(2),
-                  Text(
-                    'Crie uma categoria personalizada para suas transações.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: cs.onSurface.withAlpha(153),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        content: Form(
-          key: formKey,
-          child: TextFormField(
-            controller: controller,
-            textCapitalization: TextCapitalization.sentences,
-            autofocus: true,
-            style: AppTheme.inputTextStyle(context),
-            cursorColor: cs.primary,
-            decoration: AppTheme.inputDecoration(
-              context,
-              label: 'Nome da categoria',
-            ),
-            validator: (v) {
-              if (v == null || v.trim().isEmpty) {
-                return 'Informe o nome da categoria';
-              }
-              if (v.trim().length < 2) {
-                return 'Nome muito curto (mín. 2 caracteres)';
-              }
-              return null;
-            },
-          ),
-        ),
-        actions: [
-          TextButton(
-            style: TextButton.styleFrom(
-              foregroundColor: cs.onSurface.withAlpha(178),
-            ),
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: cs.primary,
-              foregroundColor: cs.onPrimary,
-              elevation: 0,
-            ),
-            onPressed: () async {
-              if (!formKey.currentState!.validate()) return;
-
-              final name = controller.text.trim();
-              final existing = await DatabaseHelper.instance.getCategories();
-
-              // Verifica duplicata (case-insensitive)
-              final alreadyExists = existing.any(
-                (c) => c.name.toLowerCase() == name.toLowerCase(),
-              );
-
-              if (alreadyExists) {
-                if (ctx.mounted) Navigator.pop(ctx);
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    AppTheme.snackBar(
-                      context,
-                      message: 'A categoria "$name" já existe.',
-                      icon: Icons.info_outline_rounded,
-                    ),
-                  );
-                }
-                return;
-              }
-
-              await DatabaseHelper.instance.insertCategory(
-                Categories(
-                  name: name,
-                  icon: 'label',
-                  colorHex: '#5B5F97',
-                  type: 'expense',
-                ),
-              );
-
-              ref.invalidate(categoriesProvider);
-              if (ctx.mounted) Navigator.pop(ctx);
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  AppTheme.snackBar(
-                    context,
-                    message: 'Categoria "$name" adicionada com sucesso!',
-                    icon: Icons.check_circle_outline_rounded,
-                    backgroundColor:
-                        Theme.of(context).brightness == Brightness.dark
-                            ? const Color(0xFF133223)
-                            : const Color(0xFF166534),
-                    foregroundColor: Colors.white,
-                  ),
-                );
-              }
-            },
-            child: const Text('Adicionar'),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _showClearDataConfirm(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
     showDialog(
@@ -675,17 +543,6 @@ class SettingsScreen extends ConsumerWidget {
                 settings.salaryCents,
               ),
             ),
-            SettingsTile(
-              icon: Icons.flag_rounded,
-              title: 'Metas financeiras',
-              subtitle: 'Crie e acompanhe metas na aba Metas',
-              trailing: Icon(
-                Icons.chevron_right_rounded,
-                color: cs.onSurface.withAlpha(89),
-              ),
-              onTap: null,
-            ),
-            const Gap(24),
 
             // ── Aparência ────────────────────────────────────────────
             const SettingsSectionHeader(label: 'Aparência'),
@@ -693,7 +550,7 @@ class SettingsScreen extends ConsumerWidget {
             SettingsTile(
               icon: Icons.dark_mode_rounded,
               title: 'Modo escuro',
-              subtitle: 'Ativar tema escuro no app',
+              subtitle: 'Alternar tema',
               trailing: Switch(
                 value: settings.darkMode,
                 onChanged: (v) => ref
@@ -710,7 +567,7 @@ class SettingsScreen extends ConsumerWidget {
               SettingsTile(
                 icon: Icons.notifications_rounded,
                 title: 'Notificações',
-                subtitle: 'Alertas diários para registrar seus gastos',
+                subtitle: 'Lembretes diários',
                 trailing: Switch(
                   value: settings.notificationsEnabled,
                   onChanged: (v) async {
@@ -762,11 +619,29 @@ class SettingsScreen extends ConsumerWidget {
             const Gap(10),
             SettingsTile(
               icon: Icons.category_rounded,
-              title: 'Adicionar categoria',
-              subtitle: 'Crie categorias personalizadas para transações',
+              title: 'Gerenciar categorias',
+              subtitle: 'Adicionar, editar e remover categorias',
               trailing: Icon(Icons.chevron_right_rounded,
                   color: cs.onSurface.withAlpha(89)),
-              onTap: () => _showManageCategoriesDialog(context, ref),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const CategoryManagementScreen(),
+                ),
+              ),
+            ),
+            SettingsTile(
+              icon: Icons.track_changes_rounded,
+              title: 'Metas por categoria',
+              subtitle: 'Defina limites mensais de gasto',
+              trailing: Icon(Icons.chevron_right_rounded,
+                  color: cs.onSurface.withAlpha(89)),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const CategoryManagementScreen(),
+                ),
+              ),
             ),
             const Gap(24),
 
@@ -791,7 +666,7 @@ class SettingsScreen extends ConsumerWidget {
             SettingsTile(
               icon: Icons.info_outline_rounded,
               title: 'Sobre o Nexa',
-              subtitle: 'Versão 1.4.0',
+              subtitle: 'Versão 1.5.0',
               trailing: Icon(Icons.chevron_right_rounded,
                   color: cs.onSurface.withAlpha(89)),
               onTap: () => _showAboutDialog(context),

@@ -533,18 +533,15 @@ class _GoalCard extends StatelessWidget {
                   ],
                 ),
               ),
-              PopupMenuButton<String>(
-                onSelected: (value) {
-                  if (value == 'edit') onEdit();
-                  if (value == 'delete') onDelete?.call();
-                },
-                itemBuilder: (_) => [
-                  const PopupMenuItem(value: 'edit', child: Text('Editar')),
-                  if (onDelete != null)
-                    const PopupMenuItem(
-                        value: 'delete', child: Text('Excluir')),
-                ],
-              ),
+              if (onDelete != null)
+                IconButton(
+                  onPressed: onDelete,
+                  tooltip: 'Excluir meta',
+                  icon: Icon(
+                    Icons.delete_outline_rounded,
+                    color: cs.error,
+                  ),
+                ),
             ],
           ),
           const Gap(16),
@@ -590,8 +587,14 @@ class _GoalCard extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: OutlinedButton.icon(
+                child: ElevatedButton.icon(
                   onPressed: onEdit,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: cs.primary.withAlpha(16),
+                    foregroundColor: cs.primary,
+                    elevation: 0,
+                    side: BorderSide(color: cs.primary.withAlpha(40)),
+                  ),
                   icon: const Icon(Icons.edit_rounded, size: 18),
                   label: const Text('Editar'),
                 ),
@@ -601,8 +604,9 @@ class _GoalCard extends StatelessWidget {
                 child: ElevatedButton.icon(
                   onPressed: onContribute,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: color,
-                    foregroundColor: Colors.white,
+                    backgroundColor: cs.primary,
+                    foregroundColor: cs.onPrimary,
+                    elevation: 0,
                   ),
                   icon: const Icon(Icons.add_rounded, size: 18),
                   label: const Text('Aportar'),

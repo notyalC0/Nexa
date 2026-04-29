@@ -2,7 +2,7 @@
 
 Aplicativo de controle financeiro pessoal desenvolvido com Flutter, focado em simplicidade, design moderno e performance.
 
-> **Versão atual:** 1.4.0
+> **Versão atual:** 1.5.0
 >
 > Histórico completo: [CHANGELOG.md](CHANGELOG.md)
 
@@ -59,6 +59,7 @@ Aplicativo de controle financeiro pessoal desenvolvido com Flutter, focado em si
 - **Gráfico de evolução** (BarChart): receitas vs despesas dos últimos 6 meses com tooltip interativo
 - **Gastos por categoria**: top 6 do mês com ícone, cor, barra de progresso e percentual
 - **Gastos por cartão de crédito**: split visual cartão vs débito/dinheiro + breakdown por cartão
+- **Metas por categoria**: limites mensais por categoria com progresso e destaque quando o limite é ultrapassado
 - **Orçamento mensal**: barra de progresso gasto vs salário configurado, com badge de status
 - **Metas financeiras**: lista de metas ativas com progresso, valor restante e estimativa por média mensal de aportes
 - **Atualização reativa**: dados recalculam automaticamente ao salvar/editar transações
@@ -77,6 +78,7 @@ Aplicativo de controle financeiro pessoal desenvolvido com Flutter, focado em si
 
 - **Splash animada** com logo, nome do app e animações sequenciais (fade + scale)
 - Transição suave para a tela principal
+- Ao abrir o app pela primeira vez, exibe um modal com as novidades da versão
 
 ### Header / Home
 
@@ -107,7 +109,8 @@ Aplicativo de controle financeiro pessoal desenvolvido com Flutter, focado em si
 - Saldo inicial configurável
 - Configuração de salário mensal
 - Seção financeira orienta o uso da nova aba **Metas**
-- Gerenciamento de categorias personalizadas
+- Gerenciamento de categorias personalizadas com edição, exclusão e metas por categoria
+- Metas por categoria com limite mensal e acompanhamento no Insights
 
 ### Notificações
 
@@ -135,19 +138,20 @@ feature/
 
 Utiliza **Riverpod 3** com `NotifierProvider` e `FutureProvider`:
 
-| Provider                         | Tipo               | Responsabilidade                                                   |
-| -------------------------------- | ------------------ | ------------------------------------------------------------------ |
-| `balanceProvider`                | `FutureProvider`   | Saldo disponível, projetado, receitas, despesas                    |
-| `healthScoreProvider`            | `FutureProvider`   | Score de saúde financeira (0–100)                                  |
-| `transactionsByMonthProvider`    | `FutureProvider`   | Lista filtrada por mês/tipo                                        |
-| `transactionsProvider`           | `FutureProvider`   | Todas as transações do mês selecionado                             |
-| `analyticsProvider`              | `FutureProvider`   | Dados completos de análise (trend, categorias, cartões, orçamento) |
-| `goalsProvider`                  | `FutureProvider`   | Lista de metas com progresso, restante e estimativa                |
-| `selectedMonthProvider`          | `StateProvider`    | Mês selecionado na tela de análise                                 |
-| `creditCardProvider`             | `FutureProvider`   | Lista de cartões                                                   |
-| `cardLimitDetailsProvider`       | `FutureProvider`   | Limites usados por cartão                                          |
-| `selectedTransactionIdsProvider` | `NotifierProvider` | Set de IDs em multi-seleção                                        |
-| `appSettingsProvider`            | `NotifierProvider` | Configurações (tema, saldo oculto, perfil, etc.)                   |
+| Provider                         | Tipo               | Responsabilidade                                                                        |
+| -------------------------------- | ------------------ | --------------------------------------------------------------------------------------- |
+| `balanceProvider`                | `FutureProvider`   | Saldo disponível, projetado, receitas, despesas                                         |
+| `healthScoreProvider`            | `FutureProvider`   | Score de saúde financeira (0–100)                                                       |
+| `transactionsByMonthProvider`    | `FutureProvider`   | Lista filtrada por mês/tipo                                                             |
+| `transactionsProvider`           | `FutureProvider`   | Todas as transações do mês selecionado                                                  |
+| `analyticsProvider`              | `FutureProvider`   | Dados completos de análise (trend, categorias, metas por categoria, cartões, orçamento) |
+| `goalsProvider`                  | `FutureProvider`   | Lista de metas com progresso, restante e estimativa                                     |
+| `categoryGoalsProvider`          | `FutureProvider`   | Metas por categoria com limite mensal e progresso                                       |
+| `selectedMonthProvider`          | `StateProvider`    | Mês selecionado na tela de análise                                                      |
+| `creditCardProvider`             | `FutureProvider`   | Lista de cartões                                                                        |
+| `cardLimitDetailsProvider`       | `FutureProvider`   | Limites usados por cartão                                                               |
+| `selectedTransactionIdsProvider` | `NotifierProvider` | Set de IDs em multi-seleção                                                             |
+| `appSettingsProvider`            | `NotifierProvider` | Configurações (tema, saldo oculto, perfil, etc.)                                        |
 
 ### Otimizações de performance
 
@@ -174,7 +178,11 @@ lib/
 │   │   ├── transactions.dart
 │   │   ├── credit_cards.dart
 │   │   ├── categories.dart
-│   │   └── goals.dart
+│   │   ├── goals.dart
+│   │   ├── category_goal.dart
+│   │   └── category_goal_progress.dart
+│   ├── config/
+│   │   └── app_config.dart
 │   ├── notifications/
 │   │   └── notification_service.dart # Singleton: agenda/cancela lembretes locais
 │   ├── theme/
@@ -208,7 +216,7 @@ lib/
     │       └── transactions_selection_provider.dart
     ├── insights/
     │   ├── screens/insights_screen.dart      # Tela completa de análise financeira
-    │   └── providers/analytics_provider.dart # Trend, categorias, cartões, orçamento e metas
+    │   └── providers/analytics_provider.dart # Trend, categorias, metas por categoria, cartões, orçamento e metas
     ├── goals/
     │   ├── models/goal_progress.dart
     │   ├── providers/goals_provider.dart
@@ -220,6 +228,7 @@ lib/
     │   └── providers/cards_provider.dart
     └── settings/
         ├── screens/settings_screen.dart
+        ├── screens/category_management_screen.dart
         └── providers/app_settings_provider.dart
 ```
 
@@ -249,7 +258,7 @@ lib/
 
 ## Banco de dados
 
-SQLite gerenciado por `DatabaseHelper` (singleton). Schema versão 4.
+SQLite gerenciado por `DatabaseHelper` (singleton). Schema versão 5.
 
 ### Tabelas
 
@@ -282,6 +291,8 @@ SQLite gerenciado por `DatabaseHelper` (singleton). Schema versão 4.
 
 **`goals`** — `id`, `name`, `target_amount_cents`, `initial_amount_cents`, `target_date`, `icon`, `color_hex`, `is_default`, `is_deletable`, `is_archived`, `created_at`, `updated_at`
 
+**`category_goals`** — `id`, `category_id`, `limit_cents`
+
 **`settings`** — `key`, `value` (chave-valor genérico)
 
 ### Migrações
@@ -293,6 +304,9 @@ SQLite gerenciado por `DatabaseHelper` (singleton). Schema versão 4.
   - adiciona `is_invoice_paid` e `goal_id` em `transactions`
   - cria a tabela `goals`
   - migra a reserva de emergência antiga de `settings` para uma meta padrão
+- **v4 → v5**:
+  - cria a tabela `category_goals` para limites mensais por categoria
+  - mantém a integridade dos relacionamentos com `categories`
 
 ---
 

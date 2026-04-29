@@ -16,6 +16,7 @@ import 'package:nexa/features/home/provider/balance_provider.dart';
 import 'package:nexa/features/home/provider/health_score_provider.dart';
 import 'package:nexa/features/home/widgets/balance_pill.dart';
 import 'package:nexa/features/home/widgets/health_score_card.dart';
+import 'package:nexa/features/home/widgets/launch_novelties_dialog.dart';
 import 'package:nexa/features/insights/providers/analytics_provider.dart';
 import 'package:nexa/features/insights/screens/insights_screen.dart';
 import 'package:nexa/features/settings/providers/app_settings_provider.dart';
@@ -45,6 +46,22 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _maybeShowLaunchNovelties();
+    });
+  }
+
+  Future<void> _maybeShowLaunchNovelties() async {
+    final seen =
+        await DatabaseHelper.instance.getSetting('launch_novelties_seen');
+    if (!mounted || seen == '1') return;
+
+    await showLaunchNoveltiesDialog(context);
+  }
 
   @override
   Widget build(BuildContext context) {

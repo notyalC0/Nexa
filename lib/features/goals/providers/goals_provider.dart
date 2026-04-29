@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nexa/core/database/database_helper.dart';
+import 'package:nexa/core/models/category_goal.dart';
 import 'package:nexa/features/goals/models/goal_progress.dart';
 
 final goalsProvider = FutureProvider<List<GoalProgress>>((ref) async {
@@ -63,4 +64,9 @@ final defaultGoalProgressProvider = FutureProvider<GoalProgress?>((ref) async {
     if (goal.goal.isDefault) return goal;
   }
   return null;
+});
+
+/// Provider que lista todas as metas de categoria cadastradas.
+final categoryGoalsProvider = FutureProvider<List<CategoryGoal>>((ref) async {
+  return DatabaseHelper.instance.getCategoryGoals();
 });

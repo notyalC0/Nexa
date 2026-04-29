@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nexa/core/database/database_helper.dart';
+import 'package:nexa/core/models/category_goal_progress.dart';
 import 'package:nexa/features/goals/models/goal_progress.dart';
 import 'package:nexa/features/goals/providers/goals_provider.dart';
 import 'package:nexa/features/settings/providers/app_settings_provider.dart';
@@ -50,6 +51,7 @@ class CardExpense {
 class AnalyticsData {
   final List<MonthlyTrend> trend; // últimos 6 meses
   final List<CategoryExpense> topCategories; // top 6 do mês selecionado
+  final List<CategoryGoalProgress> goalProgress;
   final List<CardExpense> cardExpenses; // gastos por cartão no mês
   final List<GoalProgress> goals;
   final int currentIncomeCents;
@@ -59,6 +61,7 @@ class AnalyticsData {
   const AnalyticsData({
     required this.trend,
     required this.topCategories,
+    required this.goalProgress,
     required this.cardExpenses,
     required this.goals,
     required this.currentIncomeCents,
@@ -146,6 +149,23 @@ final analyticsProvider = FutureProvider<AnalyticsData>((ref) async {
       .toList()
     ..sort((a, b) => b.totalCents.compareTo(a.totalCents));
 
+  final categoryGoals = await db.getCategoryGoals();
+  final goalProgress = categoryGoals
+      .map((goal) {
+        final category = categoryMap[goal.categoryId];
+        if (category == null) return null;
+        return CategoryGoalProgress(
+          categoryName: category.name,
+          colorHex: category.colorHex,
+          icon: category.icon,
+          spentCents: totals[goal.categoryId] ?? 0,
+          limitCents: goal.limitCents,
+        );
+      })
+      .whereType<CategoryGoalProgress>()
+      .toList()
+    ..sort((a, b) => b.progressRatio.compareTo(a.progressRatio));
+
   // ── Gastos por cartão no mês selecionado ─────────────────────────────
   final cards = await db.getCreditCards();
   final cardMap = {for (final c in cards) c.id: c};
@@ -189,6 +209,7 @@ final analyticsProvider = FutureProvider<AnalyticsData>((ref) async {
   return AnalyticsData(
     trend: trend,
     topCategories: topCategories.take(6).toList(),
+    goalProgress: goalProgress,
     cardExpenses: cardExpenses,
     goals: goals,
     currentIncomeCents: currentIncome,

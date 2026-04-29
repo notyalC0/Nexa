@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:nexa/core/database/default_categories.dart';
+import 'package:nexa/core/models/category_goal.dart';
 import 'package:nexa/core/models/categories.dart';
 import 'package:nexa/core/models/credit_cards.dart';
 import 'package:nexa/core/models/goals.dart';
@@ -23,7 +24,7 @@ class DatabaseHelper {
     final path = join(await getDatabasesPath(), 'nexa.db');
     return openDatabase(
       path,
-      version: 4,
+      version: 5,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
@@ -63,6 +64,9 @@ class DatabaseHelper {
     if (oldVersion < 4) {
       await _migrateV3ToV4(db);
     }
+    if (oldVersion < 5) {
+      await _createCategoryGoalsTable(db);
+    }
   }
 
   Future<void> _createTables(Database db, int version) async {
@@ -95,6 +99,7 @@ class DatabaseHelper {
       )
     ''');
     await _createGoalsTable(db);
+    await _createCategoryGoalsTable(db);
     await _createTransactionsTableV4(db);
     await _ensureDefaultGoal(db);
     await _removeDuplicateCategoriesFromDb(db);
@@ -179,6 +184,17 @@ class DatabaseHelper {
         is_archived INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
         updated_at TEXT
+      )
+    ''');
+  }
+
+  Future<void> _createCategoryGoalsTable(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS category_goals(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        category_id INTEGER NOT NULL UNIQUE,
+        limit_cents INTEGER NOT NULL,
+        FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
       )
     ''');
   }
@@ -381,6 +397,70 @@ class DatabaseHelper {
     final db = await database;
     return db.insert('categories', category.toMap(),
         conflictAlgorithm: ConflictAlgorithm.ignore);
+  }
+
+  Future<void> updateCategory(Categories category) async {
+    final db = await database;
+    await db.update(
+      'categories',
+      category.toMap(),
+      where: 'id = ?',
+      whereArgs: [category.id],
+    );
+  }
+
+  Future<void> deleteCategory(int categoryId) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      final fallbackMaps = await txn.query(
+        'categories',
+        columns: ['id'],
+        where: 'LOWER(name) = ?',
+        whereArgs: ['sem categoria'],
+        limit: 1,
+      );
+
+      if (fallbackMaps.isEmpty) {
+        throw Exception(
+          'Não foi possível excluir a categoria porque "Sem categoria" não foi encontrada.',
+        );
+      }
+
+      final fallbackId = fallbackMaps.first['id'] as int?;
+      if (fallbackId == null || fallbackId == categoryId) {
+        throw Exception(
+          'A categoria "Sem categoria" não pode ser removida nem usada como destino inválido.',
+        );
+      }
+
+      await txn.update(
+        'transactions',
+        {'category_id': fallbackId},
+        where: 'category_id = ?',
+        whereArgs: [categoryId],
+      );
+
+      await txn.delete(
+        'category_goals',
+        where: 'category_id = ?',
+        whereArgs: [categoryId],
+      );
+
+      await txn.delete(
+        'categories',
+        where: 'id = ?',
+        whereArgs: [categoryId],
+      );
+    });
+  }
+
+  Future<bool> categoryHasTransactions(int categoryId) async {
+    final db = await database;
+    final result = await db.rawQuery('''
+      SELECT COUNT(*) as total FROM transactions
+      WHERE category_id = ?
+    ''', [categoryId]);
+    return (result.first['total'] as int? ?? 0) > 0;
   }
 
   // ─── GOALS ────────────────────────────────────────────────────────────────
@@ -937,6 +1017,43 @@ class DatabaseHelper {
         conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
+  // ─── CATEGORY GOALS ───────────────────────────────────────────────────────
+
+  Future<List<CategoryGoal>> getCategoryGoals() async {
+    final db = await database;
+    final maps = await db.query(
+      'category_goals',
+      orderBy: 'id ASC',
+    );
+    return maps.map(CategoryGoal.fromMap).toList();
+  }
+
+  Future<void> upsertCategoryGoal(CategoryGoal goal) async {
+    final db = await database;
+    await db.insert(
+      'category_goals',
+      goal.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> deleteCategoryGoal(int categoryId) async {
+    final db = await database;
+    await db.delete(
+      'category_goals',
+      where: 'category_id = ?',
+      whereArgs: [categoryId],
+    );
+  }
+
+  Future<int> getCategoryGoalCount() async {
+    final db = await database;
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) as total FROM category_goals',
+    );
+    return result.first['total'] as int? ?? 0;
+  }
+
   Future<void> clearAllData() async {
     final db = await database;
     await db.transaction((txn) async {
@@ -944,6 +1061,7 @@ class DatabaseHelper {
       try {
         await txn.delete('transactions');
         await txn.delete('credit_cards');
+        await txn.delete('category_goals');
         await txn.delete('categories');
         await txn.delete('goals');
         await txn.delete('settings');
@@ -958,7 +1076,13 @@ class DatabaseHelper {
 
         await txn.execute('''
           DELETE FROM sqlite_sequence
-          WHERE name IN ('transactions', 'credit_cards', 'categories', 'goals')
+          WHERE name IN (
+            'transactions',
+            'credit_cards',
+            'categories',
+            'goals',
+            'category_goals'
+          )
         ''');
       } finally {
         await txn.execute('PRAGMA foreign_keys = ON');

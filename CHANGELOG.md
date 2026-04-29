@@ -2,6 +2,14 @@
 
 Todas as mudanças relevantes do Nexa ficam registradas aqui.
 
+## 1.5.0
+
+- Gerenciamento de categorias: nova tela para adicionar, editar e excluir categorias sem perder o histórico das transações
+- Metas por categoria: definição de limite mensal por categoria com acompanhamento de progresso no Insights
+- Análise atualizada: nova seção de metas por categoria com alerta visual quando o limite é ultrapassado
+- Primeira execução: modal de novidades aparece ao iniciar o app pela primeira vez
+- Banco de dados: schema atualizado para v5 com a tabela `category_goals`
+
 ## 1.4.0
 
 - Metas financeiras: nova aba dedicada com criação, edição, exclusão e progresso de metas

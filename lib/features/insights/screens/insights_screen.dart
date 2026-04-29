@@ -379,6 +379,13 @@ class _InsightsContent extends StatelessWidget {
               const Gap(22),
             ],
 
+            if (data.goalProgress.isNotEmpty) ...[
+              _SectionLabel('Metas de categoria'),
+              const Gap(10),
+              _GoalsCard(data: data),
+              const Gap(22),
+            ],
+
             // ── 4. Gastos por cartão de crédito ─────────────────────
             if (data.hasCardExpenses) ...[
               _SectionLabel('Gastos com cartões'),
@@ -399,7 +406,7 @@ class _InsightsContent extends StatelessWidget {
             if (data.hasGoals) ...[
               _SectionLabel('Metas'),
               const Gap(10),
-              _GoalsCard(goals: data.goals),
+              _FinancialGoalsCard(goals: data.goals),
               const Gap(22),
             ],
           ],
@@ -1107,9 +1114,150 @@ class _BudgetCard extends StatelessWidget {
 // ─── _GoalsCard ───────────────────────────────────────────────────────────────
 
 class _GoalsCard extends StatelessWidget {
+  final AnalyticsData data;
+
+  const _GoalsCard({required this.data});
+
+  Color _progressColor(double progressRatio, bool isOver) {
+    if (isOver) return Colors.redAccent;
+    if (progressRatio >= 0.8) return Colors.orangeAccent;
+    return const Color(0xFF2ECC71);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return _Card(
+      child: Column(
+        children: data.goalProgress.asMap().entries.map((entry) {
+          final index = entry.key;
+          final goal = entry.value;
+          final color = _hexColor(goal.colorHex);
+          final progressColor = _progressColor(goal.progressRatio, goal.isOver);
+
+          return Column(
+            children: [
+              if (index > 0)
+                Divider(
+                  height: 20,
+                  color: cs.onSurface.withAlpha(12),
+                ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: color.withAlpha(30),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      _categoryIcon(goal.icon),
+                      color: color,
+                      size: 18,
+                    ),
+                  ),
+                  const Gap(12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                goal.categoryName,
+                                style: AppTheme.actionStyle(
+                                  context,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (goal.isOver) ...[
+                              const Gap(8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.redAccent.withAlpha(20),
+                                  borderRadius: BorderRadius.circular(99),
+                                  border: Border.all(
+                                    color: Colors.redAccent.withAlpha(70),
+                                  ),
+                                ),
+                                child: const Text(
+                                  'Estourado',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.redAccent,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        const Gap(6),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(99),
+                                child: LinearProgressIndicator(
+                                  value: goal.progressRatio.clamp(0.0, 1.0),
+                                  minHeight: 6,
+                                  backgroundColor: cs.onSurface.withAlpha(18),
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    progressColor,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const Gap(10),
+                            Text(
+                              '${(goal.progressRatio * 100).round()}%',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: cs.onSurface.withAlpha(120),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Gap(6),
+                        Text(
+                          '${CurrencyFormatter.format(goal.spentCents)} / ${CurrencyFormatter.format(goal.limitCents)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: cs.onSurface.withAlpha(160),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
+// ─── _FinancialGoalsCard ────────────────────────────────────────────────────
+
+class _FinancialGoalsCard extends StatelessWidget {
   final List<GoalProgress> goals;
 
-  const _GoalsCard({required this.goals});
+  const _FinancialGoalsCard({required this.goals});
 
   @override
   Widget build(BuildContext context) {
